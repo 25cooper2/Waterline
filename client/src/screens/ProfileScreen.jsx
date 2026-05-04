@@ -1,12 +1,32 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import { api } from '../api';
 import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const nav = useNavigate();
+  const [showAddBoat, setShowAddBoat] = useState(false);
+  const [boatForm, setBoatForm] = useState({ boatIndexNumber: '', boatName: '', boatType: 'narrowboat' });
+  const [boatError, setBoatError] = useState('');
+  const [boatLoading, setBoatLoading] = useState(false);
+
+  const submitBoat = async () => {
+    setBoatError('');
+    setBoatLoading(true);
+    try {
+      await api.createBoat(boatForm);
+      await refreshUser();
+      setShowAddBoat(false);
+      setBoatForm({ boatIndexNumber: '', boatName: '', boatType: 'narrowboat' });
+    } catch (e) {
+      setBoatError(e.message);
+    } finally {
+      setBoatLoading(false);
+    }
+  };
 
   if (!user) {
     return (
@@ -74,8 +94,8 @@ export default function ProfileScreen() {
             <div className="card" style={{ padding: 20, textAlign: 'center' }}>
               <Icon name="boat" size={32} color="var(--pebble)" />
               <p style={{ margin: '10px 0 14px', color: 'var(--silt)', fontSize: 14 }}>No boat registered yet.</p>
-              <button onClick={() => nav('/map')} className="btn primary" style={{ height: 42, fontSize: 14 }}>
-                Go to map
+              <button onClick={() => setShowAddBoat(true)} className="btn primary" style={{ height: 42, fontSize: 14 }}>
+                Add my boat
               </button>
             </div>
           )}
@@ -108,6 +128,56 @@ export default function ProfileScreen() {
           </button>
         </div>
       </div>
+
+      {showAddBoat && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 2000, background: 'rgba(31,42,38,0.5)', display: 'flex', alignItems: 'flex-end' }}>
+          <div className="sheet" style={{ width: '100%', padding: '0 0 40px' }}>
+            <div className="sheet-handle" />
+            <div style={{ padding: '16px 20px 0' }}>
+              <h3 style={{ margin: '0 0 16px', fontSize: 19, fontWeight: 600 }}>Register your boat</h3>
+              <div className="stack">
+                <div>
+                  <label className="label">Boat index number (CRT)</label>
+                  <input
+                    className="field mono"
+                    value={boatForm.boatIndexNumber}
+                    onChange={e => setBoatForm(f => ({ ...f, boatIndexNumber: e.target.value.toUpperCase() }))}
+                    placeholder="E.G. ABC1234"
+                    maxLength={7}
+                  />
+                  <div style={{ fontSize: 12.5, color: 'var(--silt)', marginTop: 6 }}>Found on your CRT or authority licence.</div>
+                </div>
+                <div>
+                  <label className="label">Boat name</label>
+                  <input
+                    className="field"
+                    value={boatForm.boatName}
+                    onChange={e => setBoatForm(f => ({ ...f, boatName: e.target.value }))}
+                    placeholder="e.g. Kingfisher"
+                  />
+                </div>
+                <div>
+                  <label className="label">Boat type</label>
+                  <select className="field" value={boatForm.boatType} onChange={e => setBoatForm(f => ({ ...f, boatType: e.target.value }))}>
+                    <option value="narrowboat">Narrowboat</option>
+                    <option value="widebeam">Widebeam</option>
+                    <option value="cruiser">Cruiser</option>
+                    <option value="dutch">Dutch barge</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                {boatError && <div className="error-msg">{boatError}</div>}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setShowAddBoat(false)} className="btn ghost" style={{ flex: 1 }}>Cancel</button>
+                  <button onClick={submitBoat} disabled={!boatForm.boatIndexNumber || !boatForm.boatName || boatLoading} className="btn primary" style={{ flex: 1 }}>
+                    {boatLoading ? 'Adding…' : 'Register boat'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
