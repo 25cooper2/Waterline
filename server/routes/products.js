@@ -1,0 +1,166 @@
+import express from 'express';
+import Product from '../models/Product.js';
+import User from '../models/User.js';
+import { authMiddleware } from '../middleware/auth.js';
+
+const router = express.Router();
+
+// Create product
+router.post('/', authMiddleware, async (req, res) => {
+  try {
+    const { title, description, category, price, condition, boatIndexNumber } = req.body;
+
+    if (!title || !description || !category || price === undefined) {
+      return res.status(400).json({ error: 'Title, description, category, and price required' });
+    }
+
+    const product = new Product({
+      title,
+      description,
+      category,
+      price,
+      condition: condition || 'good',
+      sellerId: req.user.userId,
+      boatIndexNumber: boatIndexNumber || null
+    });
+
+    await product.save();
+    res.status(201).json(product);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// List products with filters
+router.get('/', async (req, res) => {
+  try {
+    const { category, minPrice, maxPrice, sortBy } = req.query;
+    const filter = { isAvailable: true };
+
+    if (category) filter.category = category;
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = parseInt(minPrice);
+      if (maxPrice) filter.price.$lte = parseInt(maxPrice);
+    }
+
+    let query = Product.find(filter).populate('sellerId', 'displayName username profilePhotoUrl');
+
+    if (sortBy === 'newest') {
+      query = query.sort({ createdAt: -1 });
+    } else if (sortBy === 'pricelow') {
+      query = query.sort({ price: 1 });
+    } else if (sortBy === 'pricehigh') {
+      query = query.sort({ price: -1 });
+    }
+
+    const products = await query.exec();
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get product
+router.get('/:productId', async (req, res) => {
+  try {
+    const product = await Product.findByIdAndUpdate(
+      req.params.productId,
+      { $inc: { views: 1 } },
+      { new: true }
+    ).populate('sellerId', 'displayName username profilePhotoUrl');
+
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    res.json(product);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update product
+router.put('/:productId', authMiddleware, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.productId);
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    if (product.sellerId.toString() !== req.user.userId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    const { title, description, category, price, condition, isAvailable, boatIndexNumber } = req.body;
+    if (title) product.title = title;
+    if (description) product.description = description;
+    if (category) product.category = category;
+    if (price !== undefined) product.price = price;
+    if (condition) product.condition = condition;
+    if (isAvailable !== undefined) product.isAvailable = isAvailable;
+    if (boatIndexNumber) product.boatIndexNumber = boatIndexNumber;
+    product.updatedAt = new Date();
+
+    await product.save();
+    res.json(product);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete product
+router.delete('/:productId', authMiddleware, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.productId);
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    if (product.sellerId.toString() !== req.user.userId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    await Product.findByIdAndDelete(req.params.productId);
+    res.json({ message: 'Product deleted' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add to favorites
+router.post('/:productId/favorite', authMiddleware, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.productId);
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    if (!product.favorites.includes(req.user.userId)) {
+      product.favorites.push(req.user.userId);
+      await product.save();
+    }
+
+    res.json(product);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Remove from favorites
+router.delete('/:productId/favorite', authMiddleware, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.productId);
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    product.favorites = product.favorites.filter(id => id.toString() !== req.user.userId);
+    await product.save();
+
+    res.json(product);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export default router;

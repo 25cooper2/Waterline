@@ -1,0 +1,24 @@
+import mongoose from 'mongoose';
+
+const productSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  category: { type: String, enum: ['parts', 'equipment', 'accessories', 'services'], required: true },
+  price: { type: Number, required: true, min: 0 },
+  sellerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  condition: { type: String, enum: ['new', 'like_new', 'good', 'fair'], default: 'good' },
+  images: [{ type: String, default: [] }],
+  location: { type: String, default: null },
+  boatIndexNumber: { type: String, default: null },
+  isAvailable: { type: Boolean, default: true },
+  views: { type: Number, default: 0 },
+  favorites: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', default: [] }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+productSchema.index({ category: 1, price: 1 });
+productSchema.index({ sellerId: 1 });
+productSchema.index({ createdAt: -1 });
+
+export default mongoose.model('Product', productSchema);
