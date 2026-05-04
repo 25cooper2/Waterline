@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
+import LoginWall from '../components/LoginWall';
 
 export default function ProfileScreen() {
   const { user, logout, refreshUser } = useAuth();
@@ -28,22 +29,7 @@ export default function ProfileScreen() {
     }
   };
 
-  if (!user) {
-    return (
-      <div className="screen">
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 36, textAlign: 'center' }}>
-          <div style={{ width: 72, height: 72, borderRadius: 18, background: 'var(--moss-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-            <Icon name="me" size={34} color="var(--moss)" />
-          </div>
-          <h2 className="serif" style={{ fontSize: 26, fontWeight: 400, fontStyle: 'italic', margin: '0 0 12px' }}>You haven't made an account yet.</h2>
-          <p className="muted" style={{ fontSize: 15, lineHeight: 1.55, maxWidth: 300, margin: 0 }}>
-            Profiles, friends and verification are all part of being a member.
-          </p>
-          <button onClick={() => nav('/auth')} className="btn primary" style={{ marginTop: 28, minWidth: 200 }}>Log in or sign up</button>
-        </div>
-      </div>
-    );
-  }
+  if (!user) return <LoginWall tab="me" />;
 
   return (
     <div className="screen">
@@ -94,7 +80,7 @@ export default function ProfileScreen() {
             <div className="card" style={{ padding: 20, textAlign: 'center' }}>
               <Icon name="boat" size={32} color="var(--pebble)" />
               <p style={{ margin: '10px 0 14px', color: 'var(--silt)', fontSize: 14 }}>No boat registered yet.</p>
-              <button onClick={() => setShowAddBoat(true)} className="btn primary" style={{ height: 42, fontSize: 14 }}>
+              <button onClick={() => nav('/onboarding/boat')} className="btn primary" style={{ height: 42, fontSize: 14 }}>
                 Add my boat
               </button>
             </div>

@@ -21,7 +21,7 @@ export default function AuthScreen() {
         nav('/map');
       } else {
         await register(email, password, displayName);
-        nav('/map');
+        nav('/onboarding/welcome');
       }
     } catch (e) {
       setError(e.message);

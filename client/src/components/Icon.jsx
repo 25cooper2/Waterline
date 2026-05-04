@@ -1,47 +1,90 @@
-const paths = {
-  map: 'M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7',
-  market: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z',
-  inbox: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
-  logbook: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
-  me: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
-  back: 'M15 19l-7-7 7-7',
-  chevron: 'M9 5l7 7-7 7',
-  check: 'M5 13l4 4L19 7',
-  close: 'M6 18L18 6M6 6l12 12',
-  plus: 'M12 4v16m8-8H4',
-  shield: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
-  lock: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
-  camera: 'M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z',
-  image: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z',
-  warning: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
-  location: 'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z',
-  send: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8',
-  edit: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
-  trash: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
-  settings: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
-  heart: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
-  star: 'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z',
-  eye: 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z',
-  boat: 'M3 17l2-8h14l2 8H3z M12 3v6 M8 9H5L3 17 M16 9h3l2 8',
-};
-
-export default function Icon({ name, size = 24, color = 'currentColor', stroke = 1.6 }) {
-  const d = paths[name];
-  if (!d) return null;
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke={color}
-      strokeWidth={stroke}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {d.split(' M ').map((segment, i) => (
-        <path key={i} d={i === 0 ? segment : 'M ' + segment} />
-      ))}
-    </svg>
-  );
+export default function Icon({ name, size = 22, stroke = 1.6, color = 'currentColor' }) {
+  const s = { width: size, height: size, fill: 'none', stroke: color, strokeWidth: stroke, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  switch (name) {
+    case 'map':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2V6z" /><path d="M9 4v16M15 6v16" /></svg>;
+    case 'logbook':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4z" /><path d="M5 17a3 3 0 0 1 3-3h11" /><path d="M9 8h6M9 11h4" /></svg>;
+    case 'market':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M4 8h16l-1 4H5L4 8z" /><path d="M4 8l1-3h14l1 3" /><path d="M6 12v8h12v-8" /><path d="M10 16h4" /></svg>;
+    case 'inbox':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a3 3 0 0 1-3 3H9l-4 3v-3a2 2 0 0 1-1-2V6z" /></svg>;
+    case 'me':
+      return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="9" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></svg>;
+    case 'back':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M14 6l-6 6 6 6" /></svg>;
+    case 'close':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M6 6l12 12M18 6l-12 12" /></svg>;
+    case 'plus':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M12 5v14M5 12h14" /></svg>;
+    case 'search':
+      return <svg viewBox="0 0 24 24" {...s}><circle cx="11" cy="11" r="6" /><path d="M16 16l4 4" /></svg>;
+    case 'filter':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M4 6h16M7 12h10M10 18h4" /></svg>;
+    case 'pin':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M12 21s7-7 7-12a7 7 0 1 0-14 0c0 5 7 12 7 12z" /><circle cx="12" cy="9" r="2.5" /></svg>;
+    case 'check':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M5 12l5 5L20 7" /></svg>;
+    case 'chevron':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M9 6l6 6-6 6" /></svg>;
+    case 'camera':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8z" /><circle cx="12" cy="13" r="4" /></svg>;
+    case 'image':
+      return <svg viewBox="0 0 24 24" {...s}><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="M3 18l5-5 5 5 3-3 5 5" /></svg>;
+    case 'send':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M4 12l16-8-6 18-3-7-7-3z" /></svg>;
+    case 'warning':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M12 4l10 17H2L12 4z" /><path d="M12 11v4M12 18v.5" /></svg>;
+    case 'shield':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6l8-3z" /></svg>;
+    case 'compass':
+      return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><path d="M15 9l-2 6-4 0 2-6 4 0z" /></svg>;
+    case 'boat':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M3 17c2 1 3 1 5 0s3-1 5 0 3 1 5 0 3-1 5 0" /><path d="M5 14h14l-2-4H7l-2 4z" /><path d="M12 10V4l5 6" /></svg>;
+    case 'fuel':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M5 20V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v15" /><path d="M5 20h10" /><path d="M15 9h2a2 2 0 0 1 2 2v6a1 1 0 0 0 2 0V8l-3-3" /></svg>;
+    case 'cafe':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M5 8h12v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V8z" /><path d="M17 10h2a2 2 0 0 1 0 4h-2" /><path d="M8 4l-1 2M11 4l-1 2M14 4l-1 2" /></svg>;
+    case 'wrench':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M14 7a4 4 0 1 1 4 4l-9 9-3-3 9-9a4 4 0 0 1-1-1z" /></svg>;
+    case 'friend':
+      return <svg viewBox="0 0 24 24" {...s}><circle cx="9" cy="9" r="3" /><circle cx="17" cy="11" r="2.5" /><path d="M3 19a6 6 0 0 1 12 0M15 16a4 4 0 0 1 6.5 1.5" /></svg>;
+    case 'bell':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2z" /><path d="M10 20a2 2 0 0 0 4 0" /></svg>;
+    case 'settings':
+      return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2.1-1.2l-.4-2.4h-4l-.4 2.4a7 7 0 0 0-2.1 1.2L5.3 6 3.3 9.3l2 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .2 1.2l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2.1 1.2l.4 2.4h4l.4-2.4a7 7 0 0 0 2.1-1.2l2.3.9 2-3.4-2-1.5c.1-.4.2-.8.2-1.2z" /></svg>;
+    case 'logout':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4" /><path d="M16 8l4 4-4 4M20 12H10" /></svg>;
+    case 'lock':
+      return <svg viewBox="0 0 24 24" {...s}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>;
+    case 'verified':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M12 3l2 2h3v3l2 2-2 2v3h-3l-2 2-2-2H7v-3l-2-2 2-2V5h3l2-2z" /><path d="M9 12l2 2 4-4" /></svg>;
+    case 'archive':
+      return <svg viewBox="0 0 24 24" {...s}><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" /><path d="M10 13h4" /></svg>;
+    case 'trash':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M5 7h14M9 7V4h6v3M7 7l1 13a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-13" /></svg>;
+    case 'heart':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M12 20s-8-5-8-11a4 4 0 0 1 8-2 4 4 0 0 1 8 2c0 6-8 11-8 11z" /></svg>;
+    case 'water':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M3 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2" /><path d="M3 18c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2" /></svg>;
+    case 'lock-open':
+      return <svg viewBox="0 0 24 24" {...s}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 7-2.5" /></svg>;
+    case 'service':
+      return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2 2M16.4 16.4l2 2M5.6 18.4l2-2M16.4 7.6l2-2" /></svg>;
+    case 'more':
+      return <svg viewBox="0 0 24 24" {...s}><circle cx="6" cy="12" r="1.3" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" /><circle cx="18" cy="12" r="1.3" fill="currentColor" stroke="none" /></svg>;
+    case 'star':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M12 4l2.5 5 5.5.8-4 4 1 5.5L12 16.8 7 19.3l1-5.5-4-4 5.5-.8L12 4z" /></svg>;
+    case 'clock':
+      return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
+    case 'eye':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>;
+    case 'eye-off':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M3 3l18 18" /><path d="M10.6 6.1A10 10 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3 3.5" /><path d="M6.6 6.6A17 17 0 0 0 2 12s4 6 10 6a10 10 0 0 0 4.5-1.1" /><path d="M9.5 9.5a3 3 0 0 0 4 4" /></svg>;
+    case 'info':
+      return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8v.01" /></svg>;
+    case 'flag':
+      return <svg viewBox="0 0 24 24" {...s}><path d="M5 21V4M5 4l13 1-2 5 2 5-13-1" /></svg>;
+    default: return null;
+  }
 }

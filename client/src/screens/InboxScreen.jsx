@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
+import LoginWall from '../components/LoginWall';
 
 export default function InboxScreen() {
   const { user } = useAuth();
@@ -22,22 +23,7 @@ export default function InboxScreen() {
       .finally(() => setLoading(false));
   }, [user]);
 
-  if (!user) {
-    return (
-      <div className="screen">
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 36, textAlign: 'center' }}>
-          <div style={{ width: 72, height: 72, borderRadius: 18, background: 'var(--moss-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-            <Icon name="inbox" size={34} color="var(--moss)" />
-          </div>
-          <h2 className="serif" style={{ fontSize: 26, fontWeight: 400, fontStyle: 'italic', margin: '0 0 12px' }}>Inbox is for members.</h2>
-          <p className="muted" style={{ fontSize: 15, lineHeight: 1.55, maxWidth: 300, margin: 0 }}>
-            Hails, marketplace messages and CRT updates are tied to your account.
-          </p>
-          <button onClick={() => nav('/auth')} className="btn primary" style={{ marginTop: 28, minWidth: 200 }}>Log in or sign up</button>
-        </div>
-      </div>
-    );
-  }
+  if (!user) return <LoginWall tab="inbox" />;
 
   const sendHail = async () => {
     setHailError('');
