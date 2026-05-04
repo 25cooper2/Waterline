@@ -74,8 +74,8 @@ export default function ProfileScreen() {
             <div className="card" style={{ padding: 20, textAlign: 'center' }}>
               <Icon name="boat" size={32} color="var(--pebble)" />
               <p style={{ margin: '10px 0 14px', color: 'var(--silt)', fontSize: 14 }}>No boat registered yet.</p>
-              <button onClick={() => nav('/onboarding/boat')} className="btn primary" style={{ height: 42, fontSize: 14 }}>
-                Add my boat
+              <button onClick={() => nav('/map')} className="btn primary" style={{ height: 42, fontSize: 14 }}>
+                Go to map
               </button>
             </div>
           )}
