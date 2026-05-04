@@ -14,13 +14,21 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Boat index number and name required' });
     }
 
-    const existingBoat = await Boat.findOne({ boatIndexNumber });
+    const normalised = boatIndexNumber.toUpperCase();
+    const existingBoat = await Boat.findOne({ boatIndexNumber: normalised });
     if (existingBoat) {
-      return res.status(400).json({ error: 'Boat index number already registered' });
+      const alreadyOwner = existingBoat.ownerId.toString() === req.user.userId;
+      const alreadyCoOwner = existingBoat.coOwners.some(id => id.toString() === req.user.userId);
+      if (alreadyOwner || alreadyCoOwner) {
+        return res.status(400).json({ error: 'You are already registered on this boat' });
+      }
+      existingBoat.coOwners.push(req.user.userId);
+      await existingBoat.save();
+      return res.status(200).json({ ...existingBoat.toObject(), attached: true });
     }
 
     const boat = new Boat({
-      boatIndexNumber,
+      boatIndexNumber: normalised,
       boatName,
       ownerId: req.user.userId
     });

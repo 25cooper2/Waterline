@@ -26,7 +26,7 @@ function Layout() {
 }
 
 export default function App() {
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
 
   if (loading) {
     return (
@@ -38,7 +38,7 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<SplashScreen />} />
+      <Route path="/" element={user ? <Navigate to="/map" replace /> : <SplashScreen />} />
       <Route path="/auth" element={<AuthScreen />} />
       <Route path="/onboarding/welcome" element={<WelcomeScreen />} />
       <Route path="/onboarding/profile" element={<OnbProfileScreen />} />

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { api } from '../api';
@@ -7,7 +7,6 @@ import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
 import Plate from '../components/Plate';
 import BottomSheet from '../components/BottomSheet';
-import Avatar from '../components/Avatar';
 
 // Fix Leaflet marker icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -28,23 +27,44 @@ const HAZARD_TYPES = [
   { id: 'other', label: 'Other' },
 ];
 
+function MapCenterTracker({ onCenterChange }) {
+  useMapEvents({
+    moveend: (e) => {
+      const c = e.target.getCenter();
+      onCenterChange([c.lat, c.lng]);
+    },
+  });
+  return null;
+}
+
 export default function MapScreen() {
   const { user } = useAuth();
   const [hazards, setHazards] = useState([]);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState({ hazards: true, friends: true, services: true, logbook: false });
+  const [mapCenter, setMapCenter] = useState([52.5, -1.8]);
+  const [locationPickMode, setLocationPickMode] = useState(null); // null | 'report' | 'checkin'
   const [showReport, setShowReport] = useState(false);
   const [showCheckin, setShowCheckin] = useState(false);
   const [selectedPin, setSelectedPin] = useState(null);
   const [reportForm, setReportForm] = useState({ hazardType: 'debris', description: '', severity: 'medium' });
+  const [checkinNotes, setCheckinNotes] = useState('');
   const [reportError, setReportError] = useState('');
-  const mapCenter = [52.5, -1.8];
 
   useEffect(() => {
     api.listHazards({ minLat: 50, maxLat: 55, minLng: -4, maxLng: 2 })
       .then(setHazards)
       .catch(() => {});
   }, []);
+
+  const startReport = () => setLocationPickMode('report');
+  const startCheckin = () => setLocationPickMode('checkin');
+
+  const confirmLocation = () => {
+    if (locationPickMode === 'report') setShowReport(true);
+    else setShowCheckin(true);
+    setLocationPickMode(null);
+  };
 
   const submitReport = async () => {
     setReportError('');
@@ -56,6 +76,12 @@ export default function MapScreen() {
     } catch (e) {
       setReportError(e.message);
     }
+  };
+
+  const submitCheckin = () => {
+    // Checkin API not yet wired up — close sheet for now
+    setShowCheckin(false);
+    setCheckinNotes('');
   };
 
   const toggleFilter = (key) => setFilters(f => ({ ...f, [key]: !f[key] }));
@@ -73,6 +99,7 @@ export default function MapScreen() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; OpenStreetMap'
         />
+        <MapCenterTracker onCenterChange={setMapCenter} />
         {visibleHazards.map(h => (
           <Circle
             key={h._id}
@@ -84,69 +111,75 @@ export default function MapScreen() {
         ))}
       </MapContainer>
 
-      {/* Search bar */}
-      <div style={{ position: 'absolute', top: 12, left: 12, right: 12, zIndex: 1000 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          background: 'var(--paper)', borderRadius: 12,
-          padding: '12px 14px', boxShadow: 'var(--sh-2)',
-          border: '1px solid var(--reed)',
-        }}>
-          <Icon name="search" size={18} color="var(--silt)" />
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Search places, friends, services"
-            style={{
-              border: 0, outline: 0, fontSize: 15, flex: 1,
-              background: 'transparent', fontFamily: 'var(--font-sans)', minWidth: 0,
-            }}
-          />
-          {user?.boatId && <Plate>BOAT</Plate>}
+      {/* Search bar — hidden during location pick */}
+      {!locationPickMode && (
+        <div style={{ position: 'absolute', top: 12, left: 12, right: 12, zIndex: 1000 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'var(--paper)', borderRadius: 12,
+            padding: '12px 14px', boxShadow: 'var(--sh-2)',
+            border: '1px solid var(--reed)',
+          }}>
+            <Icon name="search" size={18} color="var(--silt)" />
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search places, friends, services"
+              style={{
+                border: 0, outline: 0, fontSize: 15, flex: 1,
+                background: 'transparent', fontFamily: 'var(--font-sans)', minWidth: 0,
+              }}
+            />
+            {user?.boatIndexNumber && <Plate>{user.boatIndexNumber}</Plate>}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Filter chip rail */}
-      <div style={{
-        position: 'absolute', top: 70, left: 12, right: 12, zIndex: 1000,
-        display: 'flex', gap: 6, overflowX: 'auto', overflowY: 'hidden',
-        scrollbarWidth: 'none',
-      }}>
-        <FilterChip active={filters.hazards} onClick={() => toggleFilter('hazards')}>
-          <span className="sev high" /> Hazards
-        </FilterChip>
-        <FilterChip active={filters.friends} onClick={() => toggleFilter('friends')}>
-          <Icon name="friend" size={13} stroke={2} /> Friends
-        </FilterChip>
-        <FilterChip active={filters.services} onClick={() => toggleFilter('services')}>
-          <Icon name="fuel" size={13} stroke={2} /> Services
-        </FilterChip>
-        <FilterChip active={filters.logbook} onClick={() => toggleFilter('logbook')}>
-          Logbook
-        </FilterChip>
-      </div>
+      {/* Filter chip rail — hidden during location pick */}
+      {!locationPickMode && (
+        <div style={{
+          position: 'absolute', top: 70, left: 12, right: 12, zIndex: 1000,
+          display: 'flex', gap: 6, overflowX: 'auto', overflowY: 'hidden',
+          scrollbarWidth: 'none',
+        }}>
+          <FilterChip active={filters.hazards} onClick={() => toggleFilter('hazards')}>
+            <span className="sev high" /> Hazards
+          </FilterChip>
+          <FilterChip active={filters.friends} onClick={() => toggleFilter('friends')}>
+            <Icon name="friend" size={13} stroke={2} /> Friends
+          </FilterChip>
+          <FilterChip active={filters.services} onClick={() => toggleFilter('services')}>
+            <Icon name="fuel" size={13} stroke={2} /> Services
+          </FilterChip>
+          <FilterChip active={filters.logbook} onClick={() => toggleFilter('logbook')}>
+            Logbook
+          </FilterChip>
+        </div>
+      )}
 
-      {/* Right side controls */}
-      <div style={{
-        position: 'absolute', right: 12, top: 120, zIndex: 1000,
-        display: 'flex', flexDirection: 'column', gap: 6,
-      }}>
-        <CtrlBtn onClick={() => {}}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--silt)', letterSpacing: '0.06em' }}>UK</span>
-        </CtrlBtn>
-        <CtrlBtn onClick={() => {}}>
-          <Icon name="compass" size={20} color="var(--moss)" stroke={1.8} />
-        </CtrlBtn>
-      </div>
+      {/* Right side controls — hidden during location pick */}
+      {!locationPickMode && (
+        <div style={{
+          position: 'absolute', right: 12, top: 120, zIndex: 1000,
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          <CtrlBtn onClick={() => {}}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--silt)', letterSpacing: '0.06em' }}>UK</span>
+          </CtrlBtn>
+          <CtrlBtn onClick={() => {}}>
+            <Icon name="compass" size={20} color="var(--moss)" stroke={1.8} />
+          </CtrlBtn>
+        </div>
+      )}
 
-      {/* FAB pair: Check in + Report (only for logged-in users) */}
-      {user && (
+      {/* FABs: Check in + Report — only when not in pick mode */}
+      {user && !locationPickMode && (
         <div style={{
           position: 'absolute', right: 12, bottom: 16, zIndex: 1000,
           display: 'flex', flexDirection: 'column', gap: 8,
         }}>
           <button
-            onClick={() => setShowCheckin(true)}
+            onClick={startCheckin}
             style={{
               height: 50, padding: '0 18px', borderRadius: 25,
               border: '1px solid var(--reed)', background: 'var(--paper)',
@@ -158,7 +191,7 @@ export default function MapScreen() {
             <Icon name="pin" size={18} /> Check in
           </button>
           <button
-            onClick={() => setShowReport(true)}
+            onClick={startReport}
             style={{
               height: 50, padding: '0 18px', borderRadius: 25,
               background: 'var(--ink)', color: 'var(--paper)', border: 0,
@@ -172,7 +205,45 @@ export default function MapScreen() {
         </div>
       )}
 
-      {/* Pin sheet */}
+      {/* Location pick mode overlay */}
+      {locationPickMode && (
+        <>
+          {/* Crosshair pin in screen centre */}
+          <div style={{
+            position: 'absolute',
+            top: '50%', left: '50%',
+            transform: 'translate(-50%, -100%)',
+            zIndex: 1001,
+            pointerEvents: 'none',
+          }}>
+            <svg width="36" height="48" viewBox="0 0 36 48" fill="none">
+              <circle cx="18" cy="18" r="14" fill="var(--ink)" />
+              <circle cx="18" cy="18" r="9" fill="var(--paper)" />
+              <circle cx="18" cy="18" r="5" fill={locationPickMode === 'report' ? 'var(--rust)' : 'var(--moss)'} />
+              <line x1="18" y1="32" x2="18" y2="48" stroke="var(--ink)" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          </div>
+
+          {/* Instruction banner + confirm/cancel */}
+          <div style={{
+            position: 'absolute', bottom: 16, left: 12, right: 12, zIndex: 1001,
+          }}>
+            <div style={{
+              background: 'var(--paper)', borderRadius: 12, padding: '10px 16px',
+              boxShadow: 'var(--sh-2)', marginBottom: 8, textAlign: 'center',
+              fontSize: 14, color: 'var(--silt)',
+            }}>
+              Move the map to where you want to {locationPickMode === 'report' ? 'report the hazard' : 'check in'}, then tap <strong>Set location</strong>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setLocationPickMode(null)} className="btn ghost" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={confirmLocation} className="btn primary" style={{ flex: 1 }}>Set location</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Pin detail sheet */}
       <BottomSheet open={!!selectedPin} onClose={() => setSelectedPin(null)}>
         {selectedPin?.kind === 'hazard' && <HazardSheet pin={selectedPin} onClose={() => setSelectedPin(null)} />}
       </BottomSheet>
@@ -242,11 +313,18 @@ export default function MapScreen() {
           <div className="stack">
             <div>
               <label className="label">Notes (optional)</label>
-              <textarea className="field" rows={3} placeholder="Quiet stretch, good signal…" style={{ resize: 'none' }} />
+              <textarea
+                className="field"
+                rows={3}
+                value={checkinNotes}
+                onChange={e => setCheckinNotes(e.target.value)}
+                placeholder="Quiet stretch, good signal…"
+                style={{ resize: 'none' }}
+              />
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setShowCheckin(false)} className="btn ghost" style={{ flex: 1 }}>Cancel</button>
-              <button onClick={() => setShowCheckin(false)} className="btn primary" style={{ flex: 1 }}>Check in</button>
+              <button onClick={submitCheckin} className="btn primary" style={{ flex: 1 }}>Check in</button>
             </div>
           </div>
         </div>

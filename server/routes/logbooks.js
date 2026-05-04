@@ -19,7 +19,9 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Boat not found' });
     }
 
-    if (boat.ownerId.toString() !== req.user.userId) {
+    const isAuthorised = boat.ownerId.toString() === req.user.userId ||
+      boat.coOwners.some(id => id.toString() === req.user.userId);
+    if (!isAuthorised) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
@@ -96,7 +98,9 @@ router.put('/:logbookId', authMiddleware, async (req, res) => {
     }
 
     const boat = await Boat.findById(entry.boatId);
-    if (boat.ownerId.toString() !== req.user.userId) {
+    const isAuthorisedUpdate = boat.ownerId.toString() === req.user.userId ||
+      boat.coOwners.some(id => id.toString() === req.user.userId);
+    if (!isAuthorisedUpdate) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
@@ -127,7 +131,9 @@ router.delete('/:logbookId', authMiddleware, async (req, res) => {
     }
 
     const boat = await Boat.findById(entry.boatId);
-    if (boat.ownerId.toString() !== req.user.userId) {
+    const isAuthorisedDelete = boat.ownerId.toString() === req.user.userId ||
+      boat.coOwners.some(id => id.toString() === req.user.userId);
+    if (!isAuthorisedDelete) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 

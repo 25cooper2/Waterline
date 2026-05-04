@@ -39,6 +39,7 @@ export const api = {
 
   // Messages
   sendMessage: (body) => req('/api/messages', { method: 'POST', body: JSON.stringify(body) }),
+  sendHail: (body) => req('/api/messages/hail', { method: 'POST', body: JSON.stringify(body) }),
   inbox: (params = {}) => req(`/api/messages?${new URLSearchParams(params)}`),
   conversation: (userId) => req(`/api/messages/conversation/${userId}`),
   markRead: (id) => req(`/api/messages/${id}/read`, { method: 'PUT' }),

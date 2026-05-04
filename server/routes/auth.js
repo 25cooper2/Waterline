@@ -1,6 +1,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import Boat from '../models/Boat.js';
 import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -83,7 +84,17 @@ router.get('/me', authMiddleware, async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    res.json(user.toJSON());
+    const userData = user.toJSON();
+    const boat = await Boat.findOne({
+      $or: [{ ownerId: req.user.userId }, { coOwners: req.user.userId }]
+    });
+    if (boat) {
+      userData.boatId = boat._id;
+      userData.boatIndexNumber = boat.boatIndexNumber;
+      userData.boatName = boat.boatName;
+      userData.isBoatOwner = boat.ownerId.toString() === req.user.userId;
+    }
+    res.json(userData);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

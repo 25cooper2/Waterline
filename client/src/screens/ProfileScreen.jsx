@@ -66,13 +66,11 @@ export default function ProfileScreen() {
               <div className="row">
                 <Icon name="boat" size={22} color="var(--moss)" />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 15 }}>Boat registered</div>
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    {user.isVerified ? 'Verified boater' : 'Pending verification'}
-                  </div>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>{user.boatName || 'Boat registered'}</div>
+                  <div className="muted mono" style={{ fontSize: 13 }}>{user.boatIndexNumber}</div>
                 </div>
-                <span className={`chip ${user.isVerified ? 'moss' : 'amber'}`} style={{ cursor: 'default' }}>
-                  {user.isVerified ? 'Verified' : 'Pending'}
+                <span className={`chip ${user.isBoatOwner ? 'moss' : 'amber'}`} style={{ cursor: 'default' }}>
+                  {user.isBoatOwner ? 'Owner' : 'Crew'}
                 </span>
               </div>
             </div>
@@ -80,7 +78,7 @@ export default function ProfileScreen() {
             <div className="card" style={{ padding: 20, textAlign: 'center' }}>
               <Icon name="boat" size={32} color="var(--pebble)" />
               <p style={{ margin: '10px 0 14px', color: 'var(--silt)', fontSize: 14 }}>No boat registered yet.</p>
-              <button onClick={() => nav('/onboarding/boat')} className="btn primary" style={{ height: 42, fontSize: 14 }}>
+              <button onClick={() => setShowAddBoat(true)} className="btn primary" style={{ height: 42, fontSize: 14 }}>
                 Add my boat
               </button>
             </div>
@@ -91,12 +89,12 @@ export default function ProfileScreen() {
         <div style={{ padding: '24px 20px 0' }}>
           <div className="label" style={{ marginBottom: 12 }}>Account</div>
           <div className="card">
-            <div className="row" style={{ cursor: 'pointer' }}>
+            <div className="row" style={{ cursor: 'pointer' }} onClick={() => alert('Certificate upload coming soon. For now, email your CRT licence to verify@waterline.app')}>
               <Icon name="shield" size={20} color="var(--silt)" />
               <span style={{ flex: 1, fontWeight: 500 }}>Verification</span>
               <Icon name="chevron" size={16} color="var(--silt)" />
             </div>
-            <div className="row" style={{ cursor: 'pointer' }}>
+            <div className="row" style={{ cursor: 'pointer' }} onClick={() => alert('Account settings coming soon.')}>
               <Icon name="settings" size={20} color="var(--silt)" />
               <span style={{ flex: 1, fontWeight: 500 }}>Settings</span>
               <Icon name="chevron" size={16} color="var(--silt)" />

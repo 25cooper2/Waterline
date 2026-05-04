@@ -1,8 +1,48 @@
 import express from 'express';
 import Message from '../models/Message.js';
+import Boat from '../models/Boat.js';
 import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Send hail by CRT boat index number
+router.post('/hail', authMiddleware, async (req, res) => {
+  try {
+    const { recipientBoatIndexNumber, body } = req.body;
+
+    if (!recipientBoatIndexNumber || !body) {
+      return res.status(400).json({ error: 'Boat index number and message body required' });
+    }
+
+    const boat = await Boat.findOne({ boatIndexNumber: recipientBoatIndexNumber.toUpperCase() });
+
+    if (!boat) {
+      return res.status(404).json({
+        error: 'boat_not_found',
+        message: `No boat with index number "${recipientBoatIndexNumber.toUpperCase()}" is on Waterline yet.`
+      });
+    }
+
+    if (boat.ownerId.toString() === req.user.userId) {
+      return res.status(400).json({ error: 'You cannot hail your own boat' });
+    }
+
+    const message = new Message({
+      senderId: req.user.userId,
+      recipientId: boat.ownerId,
+      body,
+      isHail: true,
+      recipientBoatIndexNumber: recipientBoatIndexNumber.toUpperCase(),
+    });
+
+    await message.save();
+    await message.populate('senderId', 'displayName username profilePhotoUrl');
+
+    res.status(201).json(message);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Send message or hail
 router.post('/', authMiddleware, async (req, res) => {
