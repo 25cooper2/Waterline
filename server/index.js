@@ -2,10 +2,13 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import cron from 'node-cron';
 import authRoutes from './routes/auth.js';
 import boatRoutes from './routes/boats.js';
 import productRoutes from './routes/products.js';
 import messageRoutes from './routes/messages.js';
+import hazardRoutes from './routes/hazards.js';
+import Hazard from './models/Hazard.js';
 
 dotenv.config();
 
@@ -21,11 +24,22 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/waterline
   .then(() => console.log('✓ MongoDB connected'))
   .catch(err => console.error('✗ MongoDB error:', err.message));
 
+// Cron job: delete expired hazards every day at 2 AM
+cron.schedule('0 2 * * *', async () => {
+  try {
+    const result = await Hazard.deleteMany({ expiresAt: { $lt: new Date() } });
+    console.log(`✓ Deleted ${result.deletedCount} expired hazards`);
+  } catch (error) {
+    console.error('✗ Error deleting expired hazards:', error.message);
+  }
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/boats', boatRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/hazards', hazardRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
