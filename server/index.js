@@ -10,6 +10,7 @@ import messageRoutes from './routes/messages.js';
 import hazardRoutes from './routes/hazards.js';
 import logbookRoutes from './routes/logbooks.js';
 import followRoutes from './routes/follows.js';
+import adminRoutes from './routes/admin.js';
 import Hazard from './models/Hazard.js';
 
 dotenv.config();
@@ -44,6 +45,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/hazards', hazardRoutes);
 app.use('/api/logbooks', logbookRoutes);
 app.use('/api/users', followRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
