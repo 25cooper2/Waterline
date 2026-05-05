@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
@@ -285,9 +285,11 @@ function daysBetween(a, b) {
 export default function LogbookScreen() {
   const { user } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
+  const checkinHandled = useRef(false);
 
   const blankForm = {
     startLocation: '',
@@ -299,6 +301,33 @@ export default function LogbookScreen() {
   };
   const [form, setForm] = useState(blankForm);
   const [formError, setFormError] = useState('');
+
+  /* ── handle check-in from map ─────────────────────────────── */
+  useEffect(() => {
+    const s = location.state;
+    if (!s?.checkin || checkinHandled.current) return;
+    checkinHandled.current = true;
+    // Open the new entry form immediately
+    setShowNew(true);
+    setForm(f => ({ ...f, arrived: new Date().toISOString().split('T')[0] }));
+
+    // Reverse-geocode the pin coordinates to a place name
+    if (s.lat != null && s.lng != null) {
+      setForm(f => ({ ...f, startLocation: `${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}` }));
+      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${s.lat}&lon=${s.lng}&zoom=14`)
+        .then(r => r.json())
+        .then(data => {
+          if (data?.display_name) {
+            const name = data.display_name.split(',').slice(0, 2).join(',').trim();
+            setForm(f => ({ ...f, startLocation: name }));
+          }
+        })
+        .catch(() => {});
+    }
+
+    // Clear the location state so refreshing doesn't re-trigger
+    window.history.replaceState({}, '');
+  }, [location.state]);
 
   useEffect(() => {
     if (!user) return setLoading(false);
