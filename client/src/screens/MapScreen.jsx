@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { MapContainer, TileLayer, Circle, CircleMarker, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { api } from '../api';
@@ -51,7 +51,14 @@ export default function MapScreen() {
   const [selectedPin, setSelectedPin] = useState(null);
   const [logbookEntries, setLogbookEntries] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
+  const [canalFeatures, setCanalFeatures] = useState([]);
+  const [canalFilters, setCanalFilters] = useState({
+    toilets: true, water: true, waste: true, recycling: true, fuel: true,
+    marina: true, mooring: true, lock: true, weir: true, dam: true,
+    sluice: true, turning: true, bridge: true,
+  });
   const searchTimeout = useRef(null);
+  const overpassTimeout = useRef(null);
 
   // Auto-enter location pick if navigated from logbook
   useEffect(() => {
@@ -86,6 +93,52 @@ export default function MapScreen() {
       { enableHighAccuracy: true, timeout: 10000 }
     );
   };
+
+  const fetchCanalFeatures = () => {
+    clearTimeout(overpassTimeout.current);
+    overpassTimeout.current = setTimeout(async () => {
+      try {
+        const south = mapCenter[0] - 0.05;
+        const north = mapCenter[0] + 0.05;
+        const west = mapCenter[1] - 0.05;
+        const east = mapCenter[1] + 0.05;
+        const bbox = `${south},${west},${north},${east}`;
+        const query = `[out:json][timeout:25];
+(
+  way["waterway"~"canal|river"](${bbox});
+)->.waterways;
+(
+  nwr["amenity"~"toilets|water_point|waste_disposal|recycling|fuel"](around.waterways:200);
+  nwr["leisure"="marina"](around.waterways:200);
+  nwr["mooring"](around.waterways:200);
+  nwr["waterway"~"lock|weir|dam|sluice_gate|turning_point"](around.waterways:200);
+  nwr["bridge"](around.waterways:200);
+);
+out geom;`;
+        const res = await fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          body: query,
+        });
+        const data = await res.json();
+        const features = (data.elements || []).map(e => ({
+          id: e.id,
+          lat: e.lat || (e.center ? e.center.lat : null),
+          lng: e.lon || (e.center ? e.center.lon : null),
+          type: e.tags?.amenity || e.tags?.leisure || e.tags?.waterway || e.tags?.mooring || e.tags?.highway || 'other',
+          name: e.tags?.name || e.tags?.amenity || e.tags?.waterway || 'Feature',
+          tags: e.tags || {},
+        })).filter(f => f.lat && f.lng);
+        setCanalFeatures(features);
+      } catch (e) {
+        console.error('Overpass error:', e);
+      }
+    }, 1000);
+  };
+
+  // Fetch canal features when map center changes
+  useEffect(() => {
+    fetchCanalFeatures();
+  }, [mapCenter]);
 
   // Geocode search via Nominatim (debounced)
   const onSearchChange = (val) => {
@@ -151,6 +204,29 @@ export default function MapScreen() {
           <CircleMarker center={userLocation} radius={8}
             pathOptions={{ color: '#fff', fillColor: '#4A90D9', fillOpacity: 1, weight: 3 }} />
         )}
+        {canalFeatures.map(f => {
+          const show = (f.type === 'toilets' && canalFilters.toilets) ||
+            (f.type === 'water_point' && canalFilters.water) ||
+            (f.type === 'waste_disposal' && canalFilters.waste) ||
+            (f.type === 'recycling' && canalFilters.recycling) ||
+            (f.type === 'fuel' && canalFilters.fuel) ||
+            (f.type === 'marina' && canalFilters.marina) ||
+            (f.type === 'mooring' && canalFilters.mooring) ||
+            (f.type === 'lock' && canalFilters.lock) ||
+            (f.type === 'weir' && canalFilters.weir) ||
+            (f.type === 'dam' && canalFilters.dam) ||
+            (f.type === 'sluice_gate' && canalFilters.sluice) ||
+            (f.type === 'turning_point' && canalFilters.turning) ||
+            (f.type === 'bridge' && canalFilters.bridge);
+          if (!show) return null;
+          const color = { toilets: '#4A90D9', water_point: '#2E7D9E', waste_disposal: '#999', recycling: '#7CB342', fuel: '#FF6B6B', marina: '#FF9800', mooring: '#9C27B0', lock: '#FF5722', weir: '#00BCD4', dam: '#00897B', sluice_gate: '#607D8B', turning_point: '#FFC107', bridge: '#757575' }[f.type] || '#666';
+          return (
+            <CircleMarker key={f.id} center={[f.lat, f.lng]} radius={6}
+              pathOptions={{ color, fillColor: color, fillOpacity: 0.6, weight: 2 }}>
+              <Popup><div style={{ fontSize: 12 }}><strong>{f.name}</strong></div></Popup>
+            </CircleMarker>
+          );
+        })}
       </MapContainer>
 
       {/* Search bar */}
@@ -196,6 +272,43 @@ export default function MapScreen() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Canal features filter panel */}
+      {!locationPickMode && (
+        <div style={{
+          position: 'absolute', left: 12, top: 140, zIndex: 999,
+          background: 'var(--paper)', borderRadius: 12, boxShadow: 'var(--sh-2)',
+          border: '1px solid var(--reed)', maxWidth: 180, maxHeight: 500, overflowY: 'auto',
+        }}>
+          <div style={{ padding: '12px 14px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--reed)' }}>
+            Canal features
+          </div>
+          <div style={{ padding: '10px 8px' }}>
+            {[
+              { key: 'toilets', label: 'Toilets' },
+              { key: 'water', label: 'Water' },
+              { key: 'waste', label: 'Waste' },
+              { key: 'recycling', label: 'Recycling' },
+              { key: 'fuel', label: 'Fuel' },
+              { key: 'marina', label: 'Marina' },
+              { key: 'mooring', label: 'Mooring' },
+              { key: 'lock', label: 'Lock' },
+              { key: 'weir', label: 'Weir' },
+              { key: 'dam', label: 'Dam' },
+              { key: 'sluice', label: 'Sluice' },
+              { key: 'turning', label: 'Turning point' },
+              { key: 'bridge', label: 'Bridge' },
+            ].map(f => (
+              <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 6px', cursor: 'pointer', fontSize: 13 }}>
+                <input type="checkbox" checked={canalFilters[f.key]}
+                  onChange={() => setCanalFilters(x => ({ ...x, [f.key]: !x[f.key] }))}
+                  style={{ cursor: 'pointer' }} />
+                {f.label}
+              </label>
+            ))}
+          </div>
         </div>
       )}
 
