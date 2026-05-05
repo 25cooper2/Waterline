@@ -5,9 +5,20 @@ import SplashScreen from './screens/SplashScreen';
 import AuthScreen from './screens/AuthScreen';
 import MapScreen from './screens/MapScreen';
 import MarketScreen from './screens/MarketScreen';
+import ProductDetailScreen from './screens/ProductDetailScreen';
+import ServiceDetailScreen from './screens/ServiceDetailScreen';
+import CreateListingScreen from './screens/CreateListingScreen';
 import InboxScreen from './screens/InboxScreen';
+import MessageThreadScreen from './screens/MessageThreadScreen';
 import LogbookScreen from './screens/LogbookScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import SettingsBoatsScreen from './screens/SettingsBoatsScreen';
+import SettingsPrivacyScreen from './screens/SettingsPrivacyScreen';
+import FriendsScreen from './screens/FriendsScreen';
+import TradeSetupScreen from './screens/TradeSetupScreen';
+import HazardDetailScreen from './screens/HazardDetailScreen';
+import ReportHazardScreen from './screens/ReportHazardScreen';
 import WelcomeScreen from './screens/onboarding/WelcomeScreen';
 import OnbProfileScreen from './screens/onboarding/OnbProfileScreen';
 import OnbBoatScreen from './screens/onboarding/OnbBoatScreen';
@@ -38,13 +49,31 @@ export default function App() {
 
   return (
     <Routes>
+      {/* Public / auth */}
       <Route path="/" element={user ? <Navigate to="/map" replace /> : <SplashScreen />} />
       <Route path="/auth" element={<AuthScreen />} />
+
+      {/* Onboarding */}
       <Route path="/onboarding/welcome" element={<WelcomeScreen />} />
       <Route path="/onboarding/profile" element={<OnbProfileScreen />} />
       <Route path="/onboarding/boat" element={<OnbBoatScreen />} />
       <Route path="/onboarding/verify" element={<OnbVerifyScreen />} />
       <Route path="/onboarding/done" element={<OnbDoneScreen />} />
+
+      {/* Full-page screens (no tab bar) */}
+      <Route path="/market/product/:id" element={<ProductDetailScreen />} />
+      <Route path="/market/service/:id" element={<ServiceDetailScreen />} />
+      <Route path="/market/new" element={<CreateListingScreen />} />
+      <Route path="/inbox/:threadId" element={<MessageThreadScreen />} />
+      <Route path="/hazard/:id" element={<HazardDetailScreen />} />
+      <Route path="/report-hazard" element={<ReportHazardScreen />} />
+      <Route path="/settings" element={<SettingsScreen />} />
+      <Route path="/settings/boats" element={<SettingsBoatsScreen />} />
+      <Route path="/settings/privacy" element={<SettingsPrivacyScreen />} />
+      <Route path="/friends" element={<FriendsScreen />} />
+      <Route path="/trade-setup" element={<TradeSetupScreen />} />
+
+      {/* Main tabs with tab bar */}
       <Route element={<Layout />}>
         <Route path="/map" element={<MapScreen />} />
         <Route path="/market" element={<MarketScreen />} />
@@ -52,6 +81,7 @@ export default function App() {
         <Route path="/logbook" element={<LogbookScreen />} />
         <Route path="/me" element={<ProfileScreen />} />
       </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -39,6 +40,7 @@ function MapCenterTracker({ onCenterChange }) {
 
 export default function MapScreen() {
   const { user } = useAuth();
+  const nav = useNavigate();
   const [hazards, setHazards] = useState([]);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState({ hazards: true, friends: true, services: true, logbook: false });
@@ -61,8 +63,11 @@ export default function MapScreen() {
   const startCheckin = () => setLocationPickMode('checkin');
 
   const confirmLocation = () => {
-    if (locationPickMode === 'report') setShowReport(true);
-    else setShowCheckin(true);
+    if (locationPickMode === 'report') {
+      nav('/report-hazard', { state: { lat: mapCenter[0], lng: mapCenter[1] } });
+    } else {
+      setShowCheckin(true);
+    }
     setLocationPickMode(null);
   };
 
@@ -368,6 +373,7 @@ function CtrlBtn({ onClick, children }) {
 }
 
 function HazardSheet({ pin, onClose }) {
+  const navigate = useNavigate();
   const sev = pin.severity === 'high' ? 'rust' : pin.severity === 'medium' ? 'amber' : 'moss';
   const sevLabel = pin.severity?.charAt(0).toUpperCase() + pin.severity?.slice(1);
   return (
@@ -388,7 +394,7 @@ function HazardSheet({ pin, onClose }) {
         </button>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-        <button className="btn primary" style={{ flex: 1 }}>View details</button>
+        <button onClick={() => navigate(`/hazard/${pin._id}`, { state: { hazard: pin } })} className="btn primary" style={{ flex: 1 }}>View details</button>
         <button className="btn ghost"><Icon name="check" size={18} /> Confirm</button>
       </div>
     </div>
