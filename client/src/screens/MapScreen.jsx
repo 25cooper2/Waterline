@@ -71,8 +71,11 @@ function makeEmojiIcon(emoji) {
   });
 }
 
-function MapCenterTracker({ onCenterChange }) {
-  useMapEvents({ moveend: (e) => { const c = e.target.getCenter(); onCenterChange([c.lat, c.lng]); } });
+function MapViewTracker({ onViewChange }) {
+  useMapEvents({
+    moveend: (e) => { const b = e.target.getBounds(); onViewChange(b); },
+    zoomend: (e) => { const b = e.target.getBounds(); onViewChange(b); },
+  });
   return null;
 }
 
@@ -92,6 +95,7 @@ export default function MapScreen() {
   const [flyTarget, setFlyTarget] = useState(null);
   const [filters, setFilters] = useState({ hazards: true, friends: true, services: true, logbook: false });
   const [mapCenter, setMapCenter] = useState([52.5, -1.8]);
+  const [mapBounds, setMapBounds] = useState(null);
   const [locationPickMode, setLocationPickMode] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
   const [logbookEntries, setLogbookEntries] = useState([]);
@@ -138,17 +142,16 @@ export default function MapScreen() {
     );
   };
 
-  const fetchCanalFeatures = () => {
+  // Fetch canal features whenever the visible bounds change
+  useEffect(() => {
+    if (!mapBounds) return;
     clearTimeout(overpassTimeout.current);
     overpassTimeout.current = setTimeout(async () => {
       try {
-        const pad = 0.07;
-        const s = mapCenter[0] - pad, n = mapCenter[0] + pad;
-        const w = mapCenter[1] - pad, e = mapCenter[1] + pad;
+        const s = mapBounds.getSouth(), n = mapBounds.getNorth();
+        const w = mapBounds.getWest(), e = mapBounds.getEast();
         const bbox = `${s},${w},${n},${e}`;
 
-        // Single query: waterway ways + features near them
-        // out center geom gives us geometry for ways (lines) AND center for way-features
         const oq = `[out:json][timeout:30];
 (
   way["waterway"~"^(canal|river)$"](${bbox});
@@ -167,35 +170,24 @@ export default function MapScreen() {
 out center geom;`;
 
         const res = await fetch('https://overpass-api.de/api/interpreter', {
-          method: 'POST',
-          body: oq,
+          method: 'POST', body: oq,
         });
         const data = await res.json();
-        const lines = [];
-        const pts = [];
+        const lines = [], pts = [];
 
         for (const el of data.elements || []) {
           const tags = el.tags || {};
           const ww = tags.waterway;
-
-          // Waterway lines (canal / river ways with geometry)
           if (el.type === 'way' && (ww === 'canal' || ww === 'river') && el.geometry?.length) {
             lines.push({ id: el.id, coords: el.geometry.map(p => [p.lat, p.lon]), name: tags.name || ww });
             continue;
           }
-
-          // Feature points
           const ftype = getFeatureType(tags);
           if (!ftype) continue;
           const lat = el.lat ?? el.center?.lat;
           const lon = el.lon ?? el.center?.lon;
           if (!lat || !lon) continue;
-          pts.push({
-            id: el.id,
-            lat, lng: lon,
-            ftype,
-            name: tags.name || FEATURE_META[ftype]?.label || ftype,
-          });
+          pts.push({ id: el.id, lat, lng: lon, ftype, name: tags.name || FEATURE_META[ftype]?.label || ftype });
         }
 
         setWaterwayLines(lines);
@@ -204,9 +196,7 @@ out center geom;`;
         console.warn('Overpass fetch failed:', err);
       }
     }, 1200);
-  };
-
-  useEffect(() => { fetchCanalFeatures(); }, [mapCenter]);
+  }, [mapBounds]);
 
   // Geocode search via Nominatim (debounced)
   const onSearchChange = (val) => {
@@ -256,7 +246,7 @@ out center geom;`;
     <div className="screen" style={{ position: 'relative' }}>
       <MapContainer center={mapCenter} zoom={9} style={{ flex: 1, width: '100%', minHeight: 0, height: '100%' }} zoomControl={false}>
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
-        <MapCenterTracker onCenterChange={setMapCenter} />
+        <MapViewTracker onViewChange={(b) => { setMapBounds(b); setMapCenter([b.getCenter().lat, b.getCenter().lng]); }} />
         <FlyTo center={flyTarget} />
 
         {/* Waterway lines */}
