@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { MapContainer, TileLayer, Circle, CircleMarker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -40,6 +40,7 @@ function FlyTo({ center, zoom }) {
 export default function MapScreen() {
   const { user } = useAuth();
   const nav = useNavigate();
+  const routeLocation = useLocation();
   const [hazards, setHazards] = useState([]);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -51,6 +52,14 @@ export default function MapScreen() {
   const [logbookEntries, setLogbookEntries] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
   const searchTimeout = useRef(null);
+
+  // Auto-enter location pick if navigated from logbook
+  useEffect(() => {
+    if (routeLocation.state?.pickLocationFor) {
+      setLocationPickMode('pick-for-' + routeLocation.state.pickLocationFor);
+      window.history.replaceState({}, '');
+    }
+  }, []);
 
   useEffect(() => {
     api.listHazards({ minLat: 50, maxLat: 55, minLng: -4, maxLng: 2 })
@@ -111,8 +120,9 @@ export default function MapScreen() {
   const confirmLocation = () => {
     if (locationPickMode === 'report') {
       nav('/report-hazard', { state: { lat: mapCenter[0], lng: mapCenter[1] } });
+    } else if (locationPickMode === 'pick-for-logbook') {
+      nav('/logbook', { state: { locationPick: true, lat: mapCenter[0], lng: mapCenter[1] } });
     } else {
-      // Check in → open logbook new entry with this location
       nav('/logbook', { state: { checkin: true, lat: mapCenter[0], lng: mapCenter[1] } });
     }
     setLocationPickMode(null);
@@ -241,7 +251,7 @@ export default function MapScreen() {
           </div>
           <div style={{ position: 'absolute', bottom: 16, left: 12, right: 12, zIndex: 1001 }}>
             <div style={{ background: 'var(--paper)', borderRadius: 12, padding: '10px 16px', boxShadow: 'var(--sh-2)', marginBottom: 8, textAlign: 'center', fontSize: 14, color: 'var(--silt)' }}>
-              Move the map to where you want to {locationPickMode === 'report' ? 'report the hazard' : 'check in'}, then tap <strong>Set location</strong>
+              Move the map to where you want to {locationPickMode === 'report' ? 'report the hazard' : locationPickMode.startsWith('pick-for') ? 'set the location' : 'check in'}, then tap <strong>Set location</strong>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setLocationPickMode(null)} className="btn ghost" style={{ flex: 1 }}>Cancel</button>

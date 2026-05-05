@@ -8,20 +8,23 @@ const router = express.Router();
 // Create product
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { title, description, category, price, condition, boatIndexNumber } = req.body;
+    const { title, description, category, price, condition, boatIndexNumber, listingType, lat, lng } = req.body;
 
-    if (!title || !description || !category || price === undefined) {
-      return res.status(400).json({ error: 'Title, description, category, and price required' });
+    if (!title || !description || price === undefined) {
+      return res.status(400).json({ error: 'Title, description, and price required' });
     }
 
     const product = new Product({
       title,
       description,
-      category,
+      category: category || 'other',
+      listingType: listingType || 'thing',
       price,
       condition: condition || 'good',
       sellerId: req.user.userId,
-      boatIndexNumber: boatIndexNumber || null
+      boatIndexNumber: boatIndexNumber || null,
+      lat: lat ?? null,
+      lng: lng ?? null,
     });
 
     await product.save();
@@ -34,10 +37,12 @@ router.post('/', authMiddleware, async (req, res) => {
 // List products with filters
 router.get('/', async (req, res) => {
   try {
-    const { category, minPrice, maxPrice, sortBy } = req.query;
+    const { category, minPrice, maxPrice, sortBy, type, favoriteOf } = req.query;
     const filter = { isAvailable: true };
 
+    if (type) filter.listingType = type;
     if (category) filter.category = category;
+    if (favoriteOf) filter.favorites = favoriteOf;
     if (minPrice || maxPrice) {
       filter.price = {};
       if (minPrice) filter.price.$gte = parseInt(minPrice);

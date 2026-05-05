@@ -6,13 +6,21 @@ import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 import Plate from '../components/Plate';
 
-const PRODUCT_CATEGORIES = [
+const THING_CATEGORIES = [
   { id: '', label: 'All' },
   { id: 'engines', label: 'Engines & parts' },
   { id: 'electrical', label: 'Electrical' },
   { id: 'heating', label: 'Heating' },
   { id: 'fittings', label: 'Fittings' },
   { id: 'moorings', label: 'Moorings' },
+];
+
+const BOAT_CATEGORIES = [
+  { id: '', label: 'All boats' },
+  { id: 'narrowboat', label: 'Narrowboat' },
+  { id: 'widebeam', label: 'Widebeam' },
+  { id: 'cruiser', label: 'Cruiser' },
+  { id: 'other', label: 'Other' },
 ];
 
 const SERVICE_CATEGORIES = [
@@ -25,30 +33,53 @@ const SERVICE_CATEGORIES = [
   { id: 'tuition', label: 'Tuition' },
 ];
 
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export default function MarketScreen() {
   const { user } = useAuth();
   const nav = useNavigate();
-  const [tab, setTab] = useState('products');
+  const [tab, setTab] = useState('things');
   const [products, setProducts] = useState([]);
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showLiked, setShowLiked] = useState(false);
+  const [userLoc, setUserLoc] = useState(null);
 
-  const categories = tab === 'products' ? PRODUCT_CATEGORIES : SERVICE_CATEGORIES;
+  const categories = tab === 'things' ? THING_CATEGORIES : tab === 'boats' ? BOAT_CATEGORIES : SERVICE_CATEGORIES;
+
+  // Get user location for distance calc
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {}, { enableHighAccuracy: false, timeout: 5000 }
+      );
+    }
+  }, []);
 
   const load = async (cat = category) => {
     setLoading(true);
     try {
       const params = { sortBy: 'newest' };
       if (cat) params.category = cat;
-      if (tab === 'services') params.type = 'service';
+      if (tab === 'things') params.type = 'thing';
+      else if (tab === 'boats') params.type = 'boat';
+      else if (tab === 'services') params.type = 'service';
+      if (showLiked && user?._id) params.favoriteOf = user._id;
       const data = await api.listProducts(params);
       setProducts(data);
     } catch { }
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [tab]);
+  useEffect(() => { load(); }, [tab, showLiked]);
 
   const selectCategory = (cat) => {
     setCategory(cat);
@@ -58,12 +89,20 @@ export default function MarketScreen() {
   const switchTab = (t) => {
     setTab(t);
     setCategory('');
+    setShowLiked(false);
   };
 
   const filteredProducts = products.filter(p => {
     if (!search) return true;
     return p.title?.toLowerCase().includes(search.toLowerCase());
   });
+
+  const getDistance = (p) => {
+    if (!userLoc || !p.lat || !p.lng) return null;
+    const km = distanceKm(userLoc.lat, userLoc.lng, p.lat, p.lng);
+    const mi = km * 0.621371;
+    return mi < 0.1 ? 'Here' : `${mi.toFixed(1)} mi`;
+  };
 
   return (
     <div className="screen">
@@ -88,10 +127,11 @@ export default function MarketScreen() {
         )}
       </div>
 
-      {/* Products / Services toggle */}
+      {/* Things / Boats / Services toggle */}
       <div style={{ padding: '16px 18px 0', flexShrink: 0 }}>
         <div className="seg" style={{ width: '100%', display: 'flex' }}>
-          <button className={tab === 'products' ? 'on' : ''} onClick={() => switchTab('products')} style={{ flex: 1 }}>Products</button>
+          <button className={tab === 'things' ? 'on' : ''} onClick={() => switchTab('things')} style={{ flex: 1 }}>Things</button>
+          <button className={tab === 'boats' ? 'on' : ''} onClick={() => switchTab('boats')} style={{ flex: 1 }}>Boats</button>
           <button className={tab === 'services' ? 'on' : ''} onClick={() => switchTab('services')} style={{ flex: 1 }}>Services</button>
         </div>
       </div>
@@ -107,7 +147,7 @@ export default function MarketScreen() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder={tab === 'products' ? 'Search products...' : 'Search services...'}
+            placeholder={`Search ${tab}...`}
             style={{
               flex: 1, border: 'none', outline: 'none', background: 'transparent',
               font: '400 15px var(--font-sans)', color: 'var(--ink)',
@@ -119,18 +159,26 @@ export default function MarketScreen() {
         </div>
       </div>
 
-      {/* Category chips */}
+      {/* Category chips + Liked */}
       <div style={{
         padding: '14px 18px', display: 'flex', gap: 8,
         overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none',
       }}>
+        {user && (
+          <button
+            onClick={() => setShowLiked(l => !l)}
+            className={`chip${showLiked ? ' active' : ''}`}
+          >
+            <Icon name="heart" size={13} color={showLiked ? 'var(--paper)' : 'var(--rust)'} /> Liked
+          </button>
+        )}
         {categories.map(c => (
           <button
             key={c.id}
             onClick={() => selectCategory(c.id)}
-            className={`chip${category === c.id ? ' active' : ''}`}
+            className={`chip${category === c.id && !showLiked ? ' active' : ''}`}
           >
-            {c.label}{c.id === '' && tab === 'products' ? ` · ${products.length}` : ''}
+            {c.label}
           </button>
         ))}
       </div>
@@ -142,23 +190,26 @@ export default function MarketScreen() {
         ) : filteredProducts.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--silt)' }}>
             <Icon name="market" size={40} color="var(--pebble)" />
-            <p style={{ margin: '12px 0 0', fontSize: 15 }}>No listings yet.</p>
-            {user && (
+            <p style={{ margin: '12px 0 0', fontSize: 15 }}>
+              {showLiked ? 'No liked listings yet.' : 'No listings yet.'}
+            </p>
+            {user && !showLiked && (
               <button onClick={() => nav('/market/new')} className="btn primary" style={{ marginTop: 16 }}>
                 Post the first one
               </button>
             )}
           </div>
-        ) : tab === 'products' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {filteredProducts.map(p => (
-              <ProductCard key={p._id} product={p} onClick={() => nav(`/market/product/${p._id}`)} />
-            ))}
-          </div>
-        ) : (
+        ) : tab === 'services' ? (
           <div className="stack">
             {filteredProducts.map(p => (
               <ServiceCard key={p._id} service={p} onClick={() => nav(`/market/service/${p._id}`)} />
+            ))}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {filteredProducts.map(p => (
+              <ProductCard key={p._id} product={p} distance={getDistance(p)}
+                onClick={() => nav(tab === 'boats' ? `/market/product/${p._id}` : `/market/product/${p._id}`)} />
             ))}
           </div>
         )}
@@ -167,7 +218,7 @@ export default function MarketScreen() {
   );
 }
 
-function ProductCard({ product, onClick }) {
+function ProductCard({ product, onClick, distance }) {
   return (
     <div className="card" style={{ cursor: 'pointer' }} onClick={onClick}>
       <div style={{
@@ -185,9 +236,11 @@ function ProductCard({ product, onClick }) {
             {product.price === 0 ? 'Free' : `£${product.price?.toLocaleString()}`}
           </span>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--pebble)', marginTop: 6 }}>
-          2.4 mi away
-        </div>
+        {distance && (
+          <div style={{ fontSize: 12, color: 'var(--pebble)', marginTop: 6 }}>
+            {distance} away
+          </div>
+        )}
       </div>
     </div>
   );

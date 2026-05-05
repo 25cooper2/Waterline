@@ -6,6 +6,14 @@ import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 import Plate from '../components/Plate';
 
+function distanceMi(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 0.621371;
+}
+
 export default function ProductDetailScreen() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -14,18 +22,29 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   const [error, setError] = useState('');
+  const [userLoc, setUserLoc] = useState(null);
 
   useEffect(() => {
     (async () => {
       try {
         const data = await api.getProduct(id);
         setProduct(data);
+        if (user && data.favorites?.includes(user._id)) setLiked(true);
       } catch (e) {
         setError(e.message);
       }
       setLoading(false);
     })();
   }, [id]);
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {}, { enableHighAccuracy: false, timeout: 5000 }
+      );
+    }
+  }, []);
 
   const toggleFav = async () => {
     if (!user) return;
@@ -132,9 +151,11 @@ export default function ProductDetailScreen() {
             <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px', textTransform: 'capitalize' }}>
               {condition}
             </span>
-            <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>
-              2.4 mi
-            </span>
+            {userLoc && product.lat && product.lng && (
+              <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>
+                {distanceMi(userLoc.lat, userLoc.lng, product.lat, product.lng).toFixed(1)} mi
+              </span>
+            )}
           </div>
 
           {/* Description */}

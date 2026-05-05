@@ -70,7 +70,7 @@ function daysBetween(a, b) {
 
 /* ── Location picker overlay (search places) ────────────────── */
 
-function LocationPicker({ onSelect, onClose }) {
+function LocationPicker({ onSelect, onClose, onPickOnMap }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
   const timer = useRef(null);
@@ -111,6 +111,18 @@ function LocationPicker({ onSelect, onClose }) {
           style={{ border: 0, outline: 0, fontSize: 15, flex: 1, background: 'transparent', fontFamily: 'var(--font-sans)' }}
         />
       </div>
+      {/* Pick on map button */}
+      <button onClick={onPickOnMap} style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px',
+        borderBottom: '1px solid var(--reed)', background: 'var(--linen)',
+        border: 'none', borderBottom: '1px solid var(--reed)', width: '100%',
+        cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 600,
+        color: 'var(--moss)',
+      }}>
+        <Icon name="pin" size={18} color="var(--moss)" />
+        Pick on map
+      </button>
+
       <div style={styles.mapPickerResults}>
         {results.length === 0 && q.length >= 2 && (
           <div style={{ padding: 32, textAlign: 'center', color: 'var(--silt)', fontSize: 14 }}>Searching…</div>
@@ -156,17 +168,22 @@ export default function LogbookScreen() {
   const [form, setForm] = useState(blankForm);
   const [formError, setFormError] = useState('');
 
-  /* ── handle check-in from map ─────────────────────────────── */
+  /* ── handle check-in or location pick from map ─────────────── */
   useEffect(() => {
     const s = location.state;
-    if (!s?.checkin || checkinHandled.current) return;
+    if (!s || checkinHandled.current) return;
+    if (!s.checkin && !s.locationPick) return;
     checkinHandled.current = true;
-    setShowNew(true);
-    setEditingEntry(null);
-    setForm(f => ({ ...f, arrived: new Date().toISOString().split('T')[0], lat: s.lat, lng: s.lng }));
+
+    if (s.checkin) {
+      setShowNew(true);
+      setEditingEntry(null);
+      setForm(f => ({ ...f, arrived: new Date().toISOString().split('T')[0] }));
+    }
+    // For locationPick, the form overlay should already be open
 
     if (s.lat != null && s.lng != null) {
-      setForm(f => ({ ...f, startLocation: `${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}` }));
+      setForm(f => ({ ...f, lat: s.lat, lng: s.lng, startLocation: `${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}` }));
       fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${s.lat}&lon=${s.lng}&zoom=14`)
         .then(r => r.json())
         .then(data => {
@@ -177,6 +194,12 @@ export default function LogbookScreen() {
         })
         .catch(() => {});
     }
+
+    if (s.locationPick) {
+      setShowNew(true);
+      setShowLocationPicker(false);
+    }
+
     window.history.replaceState({}, '');
   }, [location.state]);
 
@@ -543,6 +566,11 @@ export default function LogbookScreen() {
         <LocationPicker
           onSelect={handleLocationPick}
           onClose={() => setShowLocationPicker(false)}
+          onPickOnMap={() => {
+            setShowLocationPicker(false);
+            // Navigate to map in location-pick mode, return here with result
+            nav('/map', { state: { pickLocationFor: 'logbook' } });
+          }}
         />
       )}
     </div>
