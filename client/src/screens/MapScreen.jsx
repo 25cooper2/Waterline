@@ -71,13 +71,26 @@ function makeEmojiIcon(emoji) {
   });
 }
 
-function MapViewTracker({ onViewChange }) {
+function MapViewTracker({ onViewChange, onCenterChange }) {
   const map = useMap();
-  // Fire immediately on mount so we get features for the initial viewport
-  useEffect(() => { onViewChange(map.getBounds()); }, []);
+  const toBboxKey = (b) => {
+    const r = (v) => Math.round(v * 1000) / 1000;
+    return `${r(b.getSouth())},${r(b.getWest())},${r(b.getNorth())},${r(b.getEast())}`;
+  };
+  useEffect(() => {
+    onViewChange(toBboxKey(map.getBounds()));
+    const c = map.getCenter();
+    onCenterChange([c.lat, c.lng]);
+  }, []);
   useMapEvents({
-    moveend: (e) => onViewChange(e.target.getBounds()),
-    zoomend: (e) => onViewChange(e.target.getBounds()),
+    moveend: (e) => {
+      onViewChange(toBboxKey(e.target.getBounds()));
+      const c = e.target.getCenter();
+      onCenterChange([c.lat, c.lng]);
+    },
+    zoomend: (e) => {
+      onViewChange(toBboxKey(e.target.getBounds()));
+    },
   });
   return null;
 }
@@ -98,7 +111,7 @@ export default function MapScreen() {
   const [flyTarget, setFlyTarget] = useState(null);
   const [filters, setFilters] = useState({ hazards: true, friends: true, services: true, logbook: false });
   const [mapCenter, setMapCenter] = useState([52.5, -1.8]);
-  const [mapBounds, setMapBounds] = useState(null);
+  const [bboxKey, setBboxKey] = useState(null);
   const [locationPickMode, setLocationPickMode] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
   const [logbookEntries, setLogbookEntries] = useState([]);
@@ -145,30 +158,26 @@ export default function MapScreen() {
     );
   };
 
-  // Fetch canal features whenever the visible bounds change
+  // Fetch canal features whenever visible bounds change (bboxKey is "s,w,n,e" string)
   useEffect(() => {
-    if (!mapBounds) return;
+    if (!bboxKey) return;
     clearTimeout(overpassTimeout.current);
     overpassTimeout.current = setTimeout(async () => {
       try {
-        const s = mapBounds.getSouth(), n = mapBounds.getNorth();
-        const w = mapBounds.getWest(), e = mapBounds.getEast();
-        const bbox = `${s},${w},${n},${e}`;
+        const bbox = bboxKey; // already "s,w,n,e"
 
-        const oq = `[out:json][timeout:30];
+        // Direct bbox query — no expensive `around` filter
+        const oq = `[out:json][timeout:20];
 (
   way["waterway"~"^(canal|river)$"](${bbox});
-)->.ww;
-(
-  .ww;
-  node["amenity"~"^(toilets|water_point|waste_disposal|recycling|fuel)$"](around.ww:250);
-  node["leisure"="marina"](around.ww:250);
-  node["mooring"](around.ww:250);
-  node["waterway"~"^(lock|lock_gate|weir|dam|sluice_gate|turning_point)$"](around.ww:250);
-  way["amenity"~"^(toilets|water_point|waste_disposal|recycling|fuel)$"](around.ww:250);
-  way["leisure"="marina"](around.ww:250);
-  way["waterway"~"^(lock|lock_gate|weir|dam|sluice_gate|turning_point)$"](around.ww:250);
-  way["bridge"]["bridge"!="no"](around.ww:250);
+  node["amenity"~"^(toilets|water_point|waste_disposal|recycling|fuel)$"](${bbox});
+  node["leisure"="marina"](${bbox});
+  node["mooring"](${bbox});
+  node["waterway"~"^(lock|lock_gate|weir|dam|sluice_gate|turning_point)$"](${bbox});
+  way["amenity"~"^(toilets|water_point|waste_disposal|recycling|fuel)$"](${bbox});
+  way["leisure"="marina"](${bbox});
+  way["waterway"~"^(lock|lock_gate|weir|dam|sluice_gate|turning_point)$"](${bbox});
+  way["bridge"]["bridge"!="no"]["man_made"!="aqueduct"](${bbox});
 );
 out center geom;`;
 
@@ -208,8 +217,8 @@ out center geom;`;
       } catch (err) {
         console.warn('Overpass fetch failed:', err);
       }
-    }, 1200);
-  }, [mapBounds]);
+    }, 600);
+  }, [bboxKey]);
 
   // Geocode search via Nominatim (debounced)
   const onSearchChange = (val) => {
@@ -259,7 +268,7 @@ out center geom;`;
     <div className="screen" style={{ position: 'relative' }}>
       <MapContainer center={mapCenter} zoom={9} style={{ flex: 1, width: '100%', minHeight: 0, height: '100%' }} zoomControl={false}>
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
-        <MapViewTracker onViewChange={(b) => { setMapBounds(b); setMapCenter([b.getCenter().lat, b.getCenter().lng]); }} />
+        <MapViewTracker onViewChange={setBboxKey} onCenterChange={setMapCenter} />
         <FlyTo center={flyTarget} />
 
         {/* Waterway lines */}
