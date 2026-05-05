@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapContainer, TileLayer, Circle, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Circle, CircleMarker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { api } from '../api';
@@ -48,12 +48,35 @@ export default function MapScreen() {
   const [mapCenter, setMapCenter] = useState([52.5, -1.8]);
   const [locationPickMode, setLocationPickMode] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
+  const [logbookEntries, setLogbookEntries] = useState([]);
+  const [userLocation, setUserLocation] = useState(null);
   const searchTimeout = useRef(null);
 
   useEffect(() => {
     api.listHazards({ minLat: 50, maxLat: 55, minLng: -4, maxLng: 2 })
       .then(setHazards).catch(() => {});
   }, []);
+
+  // Fetch logbook entries for map pins
+  useEffect(() => {
+    if (!user?.boatId) return;
+    api.getLogbook(user.boatId)
+      .then(data => setLogbookEntries((data.entries || []).filter(e => e.lat && e.lng)))
+      .catch(() => {});
+  }, [user]);
+
+  const goToMyLocation = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = [pos.coords.latitude, pos.coords.longitude];
+        setUserLocation(loc);
+        setFlyTarget(loc);
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   // Geocode search via Nominatim (debounced)
   const onSearchChange = (val) => {
@@ -109,6 +132,15 @@ export default function MapScreen() {
             pathOptions={{ color: SEV_COLORS[h.severity] || '#C28A2C', fillOpacity: 0.35, weight: 2 }}
             eventHandlers={{ click: () => setSelectedPin({ kind: 'hazard', ...h }) }} />
         ))}
+        {filters.logbook && logbookEntries.map(e => (
+          <CircleMarker key={e._id} center={[e.lat, e.lng]} radius={7}
+            pathOptions={{ color: '#1A6B5A', fillColor: '#1A6B5A', fillOpacity: 0.7, weight: 2 }}
+            eventHandlers={{ click: () => setSelectedPin({ kind: 'logbook', ...e }) }} />
+        ))}
+        {userLocation && (
+          <CircleMarker center={userLocation} radius={8}
+            pathOptions={{ color: '#fff', fillColor: '#4A90D9', fillOpacity: 1, weight: 3 }} />
+        )}
       </MapContainer>
 
       {/* Search bar */}
@@ -170,8 +202,7 @@ export default function MapScreen() {
       {/* Controls */}
       {!locationPickMode && (
         <div style={{ position: 'absolute', right: 12, top: 120, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <CtrlBtn onClick={() => {}}><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--silt)', letterSpacing: '0.06em' }}>UK</span></CtrlBtn>
-          <CtrlBtn onClick={() => {}}><Icon name="compass" size={20} color="var(--moss)" stroke={1.8} /></CtrlBtn>
+          <CtrlBtn onClick={goToMyLocation}><Icon name="compass" size={20} color="var(--moss)" stroke={1.8} /></CtrlBtn>
         </div>
       )}
 
@@ -223,6 +254,7 @@ export default function MapScreen() {
       {/* Hazard pin sheet */}
       <BottomSheet open={!!selectedPin} onClose={() => setSelectedPin(null)}>
         {selectedPin?.kind === 'hazard' && <HazardSheet pin={selectedPin} onClose={() => setSelectedPin(null)} />}
+        {selectedPin?.kind === 'logbook' && <LogbookSheet pin={selectedPin} onClose={() => setSelectedPin(null)} />}
       </BottomSheet>
     </div>
   );
@@ -244,6 +276,26 @@ function CtrlBtn({ onClick, children }) {
       background: 'var(--paper)', boxShadow: 'var(--sh-1)', cursor: 'pointer',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>{children}</button>
+  );
+}
+
+function LogbookSheet({ pin, onClose }) {
+  const loc = pin.startLocation || pin.endLocation || 'Unknown';
+  const date = pin.entryDate ? new Date(pin.entryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  return (
+    <div style={{ padding: '8px 22px 22px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+        <div>
+          <span className="chip moss" style={{ cursor: 'default' }}>Logbook entry</span>
+          <h3 style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.015em', margin: '10px 0 4px' }}>{loc}</h3>
+          {date && <div style={{ fontSize: 14, color: 'var(--silt)' }}>{date}</div>}
+          {pin.notes && <div style={{ fontSize: 14, color: 'var(--ink)', marginTop: 8, lineHeight: 1.5 }}>{pin.notes}</div>}
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 0, padding: 4, cursor: 'pointer', color: 'var(--silt)' }}>
+          <Icon name="close" size={20} />
+        </button>
+      </div>
+    </div>
   );
 }
 

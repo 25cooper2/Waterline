@@ -8,7 +8,7 @@ const router = express.Router();
 // Create logbook entry
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { boatId, entryDate, startLocation, endLocation, distance, weather, conditions, fuelUsed, notes, highlights } = req.body;
+    const { boatId, entryDate, endDate, startLocation, endLocation, lat, lng, distance, locks, weather, conditions, fuelUsed, notes, highlights } = req.body;
 
     if (!boatId || !entryDate) {
       return res.status(400).json({ error: 'Boat ID and entry date required' });
@@ -28,9 +28,13 @@ router.post('/', authMiddleware, async (req, res) => {
     const logbookEntry = new Logbook({
       boatId,
       entryDate: new Date(entryDate),
+      endDate: endDate ? new Date(endDate) : null,
       startLocation: startLocation || null,
       endLocation: endLocation || null,
+      lat: lat ?? null,
+      lng: lng ?? null,
       distance: distance || null,
+      locks: locks || null,
       weather: weather || null,
       conditions: conditions || null,
       fuelUsed: fuelUsed || null,
@@ -104,14 +108,18 @@ router.put('/:logbookId', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    const { startLocation, endLocation, distance, weather, conditions, fuelUsed, notes, highlights } = req.body;
-    if (startLocation) entry.startLocation = startLocation;
-    if (endLocation) entry.endLocation = endLocation;
+    const { startLocation, endLocation, lat, lng, distance, locks, endDate, weather, conditions, fuelUsed, notes, highlights } = req.body;
+    if (startLocation !== undefined) entry.startLocation = startLocation;
+    if (endLocation !== undefined) entry.endLocation = endLocation;
+    if (lat !== undefined) entry.lat = lat;
+    if (lng !== undefined) entry.lng = lng;
     if (distance !== undefined) entry.distance = distance;
+    if (locks !== undefined) entry.locks = locks;
+    if (endDate !== undefined) entry.endDate = endDate ? new Date(endDate) : null;
     if (weather) entry.weather = weather;
     if (conditions) entry.conditions = conditions;
     if (fuelUsed !== undefined) entry.fuelUsed = fuelUsed;
-    if (notes) entry.notes = notes;
+    if (notes !== undefined) entry.notes = notes;
     if (highlights) entry.highlights = highlights;
     entry.updatedAt = new Date();
 
