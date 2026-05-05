@@ -74,13 +74,13 @@ function makeEmojiIcon(emoji) {
 function makeLockIcon(label) {
   const safe = label.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
   return L.divIcon({
-    html: `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:auto">
-      <div style="width:12px;height:12px;border-radius:50%;background:#111;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.6)"></div>
-      <div style="background:rgba(255,255,255,0.95);border:1px solid #555;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;color:#111;white-space:nowrap;margin-top:2px;box-shadow:0 1px 2px rgba(0,0,0,0.2)">${safe}</div>
+    html: `<div style="position:relative;width:0;height:0;display:flex;align-items:center;pointer-events:auto">
+      <div style="position:absolute;left:-7px;top:-7px;width:14px;height:14px;border-radius:50%;background:#111;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.6);z-index:2"></div>
+      <div style="position:absolute;left:12px;top:-9px;background:rgba(255,255,255,0.95);border:1px solid #333;border-radius:3px;padding:2px 6px;font-size:11px;font-weight:700;color:#111;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);font-family:var(--font-sans, sans-serif)">${safe}</div>
     </div>`,
-    className: '',
-    iconSize: null,
-    iconAnchor: [6, 6],
+    className: 'lock-marker',
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
   });
 }
 
@@ -218,9 +218,15 @@ out center geom;`;
           }
           const ftype = getFeatureType(tags);
           if (!ftype) continue;
-          const lat = el.lat ?? el.center?.lat;
-          const lon = el.lon ?? el.center?.lon;
-          if (!lat || !lon) continue;
+          let lat = el.lat ?? el.center?.lat;
+          let lon = el.lon ?? el.center?.lon;
+          // Fallback: midpoint of way geometry if no center provided
+          if ((lat == null || lon == null) && el.geometry?.length) {
+            const mid = el.geometry[Math.floor(el.geometry.length / 2)];
+            lat = mid.lat;
+            lon = mid.lon;
+          }
+          if (lat == null || lon == null) continue;
           // Build display label — for locks include ref and name
           let label = tags.name || FEATURE_META[ftype]?.label || ftype;
           if (ftype === 'lock') {
@@ -237,6 +243,8 @@ out center geom;`;
 
         setWaterwayLines(lines);
         setCanalFeatures(pts);
+        const lockCount = pts.filter(p => p.ftype === 'lock').length;
+        console.log(`[canal] ${lines.length} waterways, ${pts.length} features (${lockCount} locks)`);
       } catch (err) {
         console.warn('Overpass fetch failed:', err);
       }
