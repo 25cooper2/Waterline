@@ -72,9 +72,12 @@ function makeEmojiIcon(emoji) {
 }
 
 function MapViewTracker({ onViewChange }) {
+  const map = useMap();
+  // Fire immediately on mount so we get features for the initial viewport
+  useEffect(() => { onViewChange(map.getBounds()); }, []);
   useMapEvents({
-    moveend: (e) => { const b = e.target.getBounds(); onViewChange(b); },
-    zoomend: (e) => { const b = e.target.getBounds(); onViewChange(b); },
+    moveend: (e) => onViewChange(e.target.getBounds()),
+    zoomend: (e) => onViewChange(e.target.getBounds()),
   });
   return null;
 }
@@ -169,10 +172,20 @@ export default function MapScreen() {
 );
 out center geom;`;
 
-        const res = await fetch('https://overpass-api.de/api/interpreter', {
-          method: 'POST', body: oq,
-        });
-        const data = await res.json();
+        // Try primary, fall back to mirror
+        const OVERPASS_ENDPOINTS = [
+          'https://overpass-api.de/api/interpreter',
+          'https://overpass.kumi.systems/api/interpreter',
+          'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+        ];
+        let data = null;
+        for (const url of OVERPASS_ENDPOINTS) {
+          try {
+            const r = await fetch(url, { method: 'POST', body: oq });
+            if (r.ok) { data = await r.json(); break; }
+          } catch { /* try next */ }
+        }
+        if (!data) { console.warn('All Overpass endpoints failed'); return; }
         const lines = [], pts = [];
 
         for (const el of data.elements || []) {
