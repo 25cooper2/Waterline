@@ -210,10 +210,11 @@ out center geom;`;
         for (const el of data.elements || []) {
           const tags = el.tags || {};
           const ww = tags.waterway;
-          // Canal/river lines — but NOT if lock=yes (those become point features)
-          if (el.type === 'way' && (ww === 'canal' || ww === 'river') && !tags.lock && el.geometry?.length) {
+          // Canal/river lines — INCLUDING lock=yes ways so the waterway is continuous
+          if (el.type === 'way' && (ww === 'canal' || ww === 'river') && el.geometry?.length) {
             lines.push({ id: el.id, coords: el.geometry.map(p => [p.lat, p.lon]), name: tags.name || ww });
-            continue;
+            // Don't continue — lock=yes ways also need to be added as a point feature below
+            if (tags.lock !== 'yes') continue;
           }
           const ftype = getFeatureType(tags);
           if (!ftype) continue;
