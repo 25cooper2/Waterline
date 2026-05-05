@@ -11,7 +11,10 @@ export default defineConfig({
       writeBundle() {
         const srcSw = path.resolve(__dirname, 'src/sw.js');
         const distSw = path.resolve(__dirname, 'dist/sw.js');
-        fs.copyFileSync(srcSw, distSw);
+        let sw = fs.readFileSync(srcSw, 'utf-8');
+        // Inject build timestamp so the browser sees a new SW file every deploy
+        sw = sw.replace('__BUILD_TIME__', Date.now().toString());
+        fs.writeFileSync(distSw, sw);
       },
     },
   ],
