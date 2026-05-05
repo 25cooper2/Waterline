@@ -37,7 +37,7 @@ function getFeatureType(tags) {
   if (tags.leisure === 'marina') return 'marina';
   if (tags.mooring && tags.mooring !== 'no') return 'mooring';
   const ww = tags.waterway;
-  if (ww === 'lock' || ww === 'lock_gate') return 'lock';
+  if (ww === 'lock') return 'lock'; // lock_gate = individual gate node, skip
   if (ww === 'weir') return 'weir';
   if (ww === 'dam') return 'dam';
   if (ww === 'sluice_gate') return 'sluice';
@@ -179,18 +179,15 @@ export default function MapScreen() {
       try {
         const bbox = bboxKey; // already "s,w,n,e"
 
-        // Direct bbox query — no expensive `around` filter
-        const oq = `[out:json][timeout:20];
+        // Nodes only for point features (fast) + ways only for canals/rivers and lock chambers
+        const oq = `[out:json][timeout:15];
 (
   way["waterway"~"^(canal|river)$"](${bbox});
+  way["waterway"="lock"](${bbox});
   node["amenity"~"^(toilets|water_point|waste_disposal|recycling|fuel)$"](${bbox});
   node["leisure"="marina"](${bbox});
-  node["mooring"](${bbox});
-  node["waterway"~"^(lock|lock_gate|weir|dam|sluice_gate|turning_point)$"](${bbox});
-  way["amenity"~"^(toilets|water_point|waste_disposal|recycling|fuel)$"](${bbox});
-  way["leisure"="marina"](${bbox});
-  way["waterway"~"^(lock|lock_gate|weir|dam|sluice_gate|turning_point)$"](${bbox});
-  way["bridge"]["bridge"!="no"]["man_made"!="aqueduct"](${bbox});
+  node["waterway"~"^(lock|weir|dam|sluice_gate|turning_point)$"](${bbox});
+  node["mooring"]["mooring"!="no"](${bbox});
 );
 out center geom;`;
 
@@ -225,8 +222,9 @@ out center geom;`;
           // Build display label — for locks include ref and name
           let label = tags.name || FEATURE_META[ftype]?.label || ftype;
           if (ftype === 'lock') {
-            const ref = tags.ref || tags['lock:ref'];
-            const name = tags.name || tags['lock:name'];
+            // UK canals use lock_name and lock_ref (underscores)
+            const ref = tags.lock_ref || tags['lock:ref'] || tags.ref;
+            const name = tags.lock_name || tags['lock:name'] || tags.name;
             if (ref && name) label = `Lock ${ref}: ${name}`;
             else if (name) label = name;
             else if (ref) label = `Lock ${ref}`;
@@ -290,7 +288,12 @@ out center geom;`;
   return (
     <div className="screen" style={{ position: 'relative' }}>
       <MapContainer center={mapCenter} zoom={9} style={{ flex: 1, width: '100%', minHeight: 0, height: '100%' }} zoomControl={false}>
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          subdomains="abcd"
+          maxZoom={19}
+        />
         <MapViewTracker onViewChange={setBboxKey} onCenterChange={setMapCenter} />
         <FlyTo center={flyTarget} />
 
