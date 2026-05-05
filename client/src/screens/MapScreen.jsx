@@ -36,8 +36,8 @@ function getFeatureType(tags) {
   if (am === 'fuel') return 'fuel';
   if (tags.leisure === 'marina') return 'marina';
   if (tags.mooring && tags.mooring !== 'no') return 'mooring';
+  if (tags.lock === 'yes') return 'lock'; // canal way with lock=yes + lock_name/lock_ref
   const ww = tags.waterway;
-  if (ww === 'lock') return 'lock'; // lock_gate = individual gate node, skip
   if (ww === 'weir') return 'weir';
   if (ww === 'dam') return 'dam';
   if (ww === 'sluice_gate') return 'sluice';
@@ -179,14 +179,14 @@ export default function MapScreen() {
       try {
         const bbox = bboxKey; // already "s,w,n,e"
 
-        // Nodes only for point features (fast) + ways only for canals/rivers and lock chambers
+        // Canal/river ways + lock=yes canal ways (for lock dots) + nodes for point features
         const oq = `[out:json][timeout:15];
 (
   way["waterway"~"^(canal|river)$"](${bbox});
-  way["waterway"="lock"](${bbox});
+  way["waterway"="canal"]["lock"="yes"](${bbox});
   node["amenity"~"^(toilets|water_point|waste_disposal|recycling|fuel)$"](${bbox});
   node["leisure"="marina"](${bbox});
-  node["waterway"~"^(lock|weir|dam|sluice_gate|turning_point)$"](${bbox});
+  node["waterway"~"^(weir|dam|sluice_gate|turning_point)$"](${bbox});
   node["mooring"]["mooring"!="no"](${bbox});
 );
 out center geom;`;
@@ -210,7 +210,8 @@ out center geom;`;
         for (const el of data.elements || []) {
           const tags = el.tags || {};
           const ww = tags.waterway;
-          if (el.type === 'way' && (ww === 'canal' || ww === 'river') && el.geometry?.length) {
+          // Canal/river lines — but NOT if lock=yes (those become point features)
+          if (el.type === 'way' && (ww === 'canal' || ww === 'river') && !tags.lock && el.geometry?.length) {
             lines.push({ id: el.id, coords: el.geometry.map(p => [p.lat, p.lon]), name: tags.name || ww });
             continue;
           }
