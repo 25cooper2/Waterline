@@ -71,6 +71,19 @@ function makeEmojiIcon(emoji) {
   });
 }
 
+function makeLockIcon(label) {
+  const safe = label.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+  return L.divIcon({
+    html: `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:auto">
+      <div style="width:12px;height:12px;border-radius:50%;background:#111;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.6)"></div>
+      <div style="background:rgba(255,255,255,0.95);border:1px solid #555;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;color:#111;white-space:nowrap;margin-top:2px;box-shadow:0 1px 2px rgba(0,0,0,0.2)">${safe}</div>
+    </div>`,
+    className: '',
+    iconSize: null,
+    iconAnchor: [6, 6],
+  });
+}
+
 function MapViewTracker({ onViewChange, onCenterChange }) {
   const map = useMap();
   const toBboxKey = (b) => {
@@ -209,7 +222,17 @@ out center geom;`;
           const lat = el.lat ?? el.center?.lat;
           const lon = el.lon ?? el.center?.lon;
           if (!lat || !lon) continue;
-          pts.push({ id: el.id, lat, lng: lon, ftype, name: tags.name || FEATURE_META[ftype]?.label || ftype });
+          // Build display label — for locks include ref and name
+          let label = tags.name || FEATURE_META[ftype]?.label || ftype;
+          if (ftype === 'lock') {
+            const ref = tags.ref || tags['lock:ref'];
+            const name = tags.name || tags['lock:name'];
+            if (ref && name) label = `Lock ${ref}: ${name}`;
+            else if (name) label = name;
+            else if (ref) label = `Lock ${ref}`;
+            else label = 'Lock';
+          }
+          pts.push({ id: el.id, lat, lng: lon, ftype, name: label });
         }
 
         setWaterwayLines(lines);
@@ -271,10 +294,10 @@ out center geom;`;
         <MapViewTracker onViewChange={setBboxKey} onCenterChange={setMapCenter} />
         <FlyTo center={flyTarget} />
 
-        {/* Waterway lines */}
+        {/* Waterway lines — rendered first so they sit behind all markers */}
         {waterwayLines.map(wl => (
           <Polyline key={wl.id} positions={wl.coords}
-            pathOptions={{ color: '#20B2AA', weight: 3, opacity: 0.75 }}>
+            pathOptions={{ color: '#20B2AA', weight: 9, opacity: 0.7 }}>
             <Popup><span style={{ fontSize: 12 }}>{wl.name}</span></Popup>
           </Polyline>
         ))}
@@ -284,9 +307,10 @@ out center geom;`;
           if (!canalFilters[f.ftype]) return null;
           const meta = FEATURE_META[f.ftype];
           if (!meta) return null;
+          const icon = f.ftype === 'lock' ? makeLockIcon(f.name) : makeEmojiIcon(meta.emoji);
           return (
-            <Marker key={f.id} position={[f.lat, f.lng]} icon={makeEmojiIcon(meta.emoji)}>
-              <Popup><div style={{ fontSize: 12 }}><strong>{meta.label}</strong>{f.name !== meta.label ? <><br />{f.name}</> : null}</div></Popup>
+            <Marker key={f.id} position={[f.lat, f.lng]} icon={icon}>
+              <Popup><div style={{ fontSize: 12 }}><strong>{f.name}</strong></div></Popup>
             </Marker>
           );
         })}
