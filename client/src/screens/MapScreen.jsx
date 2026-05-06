@@ -891,50 +891,59 @@ out center geom qt;`;
         </div>
       )}
 
-      {/* Edit-mode hint banner */}
+      {/* Edit-mode hint banner — below controls so it's not hidden */}
       {!locationPickMode && filters.logbook && editJourney && (
         <div style={{
-          position: 'absolute', top: 110, left: 12, right: 12, zIndex: 1000,
+          position: 'absolute', top: 180, left: 12, right: 12, zIndex: 1000,
           background: 'var(--ink)', color: 'var(--paper)', borderRadius: 10,
-          padding: '10px 14px', fontSize: 13, fontWeight: 500,
+          padding: '12px 14px', fontSize: 13, fontWeight: 500,
           textAlign: 'center', boxShadow: 'var(--sh-2)',
         }}>
           Drag any orange dot along the canal to choose a different route. Tap <strong>Done</strong> when finished.
         </div>
       )}
 
-      {/* Routing-loading toast */}
+      {/* Routing-loading toast — center of screen for visibility */}
       {routingLoading && (
         <div style={{
-          position: 'absolute', top: 110, left: '50%', transform: 'translateX(-50%)', zIndex: 1001,
-          background: 'rgba(20,20,20,0.85)', color: '#fff', borderRadius: 22,
-          padding: '8px 16px', fontSize: 13, fontWeight: 500, boxShadow: 'var(--sh-2)',
-          display: 'flex', alignItems: 'center',
+          position: 'absolute', top: '50%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 1001,
+          background: 'rgba(20,20,20,0.9)', color: '#fff', borderRadius: 16,
+          padding: '14px 20px', fontSize: 14, fontWeight: 500, boxShadow: 'var(--sh-3)',
+          display: 'flex', alignItems: 'center', gap: 10,
         }}>
           <span className="wl-spinner" /> Computing route…
         </div>
+      )}
+
+      {/* Edit route button — left side, black pill with white text, matches compass height */}
+      {!locationPickMode && filters.logbook && (
+        <button
+          onClick={() => setEditJourney(v => !v)}
+          style={{
+            position: 'absolute', left: 12, top: 120, zIndex: 1000,
+            background: editJourney ? '#111' : '#333',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 22,
+            padding: '10px 16px',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 8,
+            boxShadow: 'var(--sh-1)',
+          }}
+        >
+          <Icon name={editJourney ? 'check' : 'edit'} size={16} color="#fff" />
+          {editJourney ? 'Done' : 'Edit route'}
+        </button>
       )}
 
       {/* Controls (right side) */}
       {!locationPickMode && (
         <div style={{ position: 'absolute', right: 12, top: 120, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <CtrlBtn onClick={goToMyLocation}><Icon name="compass" size={20} color="var(--moss)" stroke={1.8} /></CtrlBtn>
-          {/* Edit route toggle — only when logbook layer is on */}
-          {filters.logbook && (
-            <CtrlBtn
-              onClick={() => setEditJourney(v => !v)}
-              style={{
-                background: editJourney ? 'var(--moss-soft)' : 'var(--paper)',
-              }}
-              title={editJourney ? 'Done editing routes' : 'Edit routes'}
-            >
-              <Icon
-                name={editJourney ? 'check' : 'edit'}
-                size={20}
-                color={editJourney ? 'var(--moss)' : 'var(--silt)'}
-              />
-            </CtrlBtn>
-          )}
         </div>
       )}
 
