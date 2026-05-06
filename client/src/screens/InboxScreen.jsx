@@ -85,13 +85,15 @@ export default function InboxScreen() {
 
   /* ---- load feed ---- */
   const getLiveLocation = () => new Promise((resolve) => {
-    if (!navigator.geolocation) return resolve(getCachedLocation());
+    const fallback = getCachedLocation()
+      || (user?.mooringLat ? { lat: user.mooringLat, lng: user.mooringLng } : null);
+    if (!navigator.geolocation) return resolve(fallback);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         saveDeviceLocation(pos.coords.latitude, pos.coords.longitude);
         resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       },
-      () => resolve(getCachedLocation()),
+      () => resolve(fallback),
       { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
     );
   });
@@ -382,6 +384,13 @@ export default function InboxScreen() {
                 onTagClick={(t) => { setActiveTag(t); setFeedQuery(''); }}
                 onAuthorClick={(authorId) => navigate(`/profile/${authorId}`)}
                 onOpen={() => setOpenPostId(item.data._id)}
+                onLike={async () => {
+                  if (!requireLogin()) return;
+                  setPosts(prev => prev.map(p => p._id === item.data._id
+                    ? { ...p, likedByMe: !p.likedByMe, likeCount: (p.likeCount || 0) + (p.likedByMe ? -1 : 1) }
+                    : p));
+                  try { await api.likePost(item.data._id); } catch {}
+                }}
                 currentUser={user}
               />
             ))
@@ -620,32 +629,36 @@ function PostCard({ post, onTagClick, onAuthorClick, onOpen }) {
             <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--silt)', flexShrink: 0 }}>{timeAgo(post.createdAt)}</span>
           </div>
           <div style={{ fontSize: 14.5, color: 'var(--ink)', lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{post.body}</div>
-          {post.photos?.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-              {post.photos.map((src, i) => (
-                <div key={i} style={{ width: '100%', aspectRatio: '4 / 3', borderRadius: 8, background: `url(${src}) center/cover`, border: '1px solid var(--reed)' }} />
-              ))}
-            </div>
-          )}
-          {post.tags?.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-              {post.tags.map(t => (
-                <button key={t} onClick={(e) => { e.stopPropagation(); onTagClick?.(t); }}
-                  style={{ background: 'var(--moss-soft)', color: 'var(--moss)', border: 0, borderRadius: 6, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>#{t}</button>
-              ))}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 14, marginTop: 8, fontSize: 12.5, color: 'var(--silt)' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Icon name="inbox" size={13} /> {post.replyCount || 0} repl{(post.replyCount || 0) === 1 ? 'y' : 'ies'}
-            </span>
-            {post.locationName && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Icon name="pin" size={13} /> {post.locationName}
-              </span>
-            )}
-          </div>
         </div>
+      </div>
+      {post.photos?.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+          {post.photos.map((src, i) => (
+            <img key={i} src={src} alt="" style={{ width: '100%', borderRadius: 10, display: 'block', maxHeight: 400, objectFit: 'cover' }} />
+          ))}
+        </div>
+      )}
+      {post.tags?.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {post.tags.map(t => (
+            <button key={t} onClick={(e) => { e.stopPropagation(); onTagClick?.(t); }}
+              style={{ background: 'var(--moss-soft)', color: 'var(--moss)', border: 0, borderRadius: 6, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>#{t}</button>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 14, marginTop: 8, fontSize: 12.5, color: 'var(--silt)' }}>
+        <button onClick={(e) => { e.stopPropagation(); onLike?.(); }}
+          style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 0, padding: 0, cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: 12.5, color: post.likedByMe ? 'var(--moss)' : 'var(--silt)' }}>
+          <Icon name="heart" size={13} stroke={post.likedByMe ? 0 : 2} color={post.likedByMe ? 'var(--moss)' : 'var(--silt)'} /> {post.likeCount || 0}
+        </button>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Icon name="inbox" size={13} /> {post.replyCount || 0} repl{(post.replyCount || 0) === 1 ? 'y' : 'ies'}
+        </span>
+        {post.locationName && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Icon name="pin" size={13} /> {post.locationName}
+          </span>
+        )}
       </div>
     </div>
   );
