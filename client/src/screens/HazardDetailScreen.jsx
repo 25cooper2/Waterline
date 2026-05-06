@@ -82,7 +82,11 @@ export default function HazardDetailScreen() {
   };
   const handleResolve = async () => {
     setResolving(true);
-    try { await api.resolveHazard(id); setDone('resolved'); } catch {}
+    try {
+      await api.resolveHazard(id);
+      setDone('resolved');
+      setTimeout(() => nav('/map'), 900);
+    } catch {}
     setResolving(false);
   };
 

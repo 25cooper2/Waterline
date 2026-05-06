@@ -31,8 +31,6 @@ export default function ReportHazardScreen() {
   const [hazardType,  setHazardType]  = useState('');
   const [severity,    setSeverity]    = useState('medium');
   const [description, setDescription] = useState('');
-  const [startsAt,    setStartsAt]    = useState('');
-  const [endsAt,      setEndsAt]      = useState('');
   const [photos,      setPhotos]      = useState([]);
   const [submitting,  setSubmitting]  = useState(false);
   const [error,       setError]       = useState('');
@@ -53,8 +51,6 @@ export default function ReportHazardScreen() {
     try {
       await api.reportHazard({
         hazardType, description: description.trim(), severity, lat, lng,
-        startsAt: startsAt || undefined,
-        endsAt: endsAt || undefined,
         photos,
       });
       nav('/map');
@@ -137,18 +133,6 @@ export default function ReportHazardScreen() {
               onChange={e => setDescription(e.target.value)}
               placeholder="Describe the hazard so other boaters know what to expect…"
               style={{ resize: 'none' }} />
-          </div>
-
-          {/* Dates */}
-          <div style={{ marginBottom: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div>
-              <label className="label">Starts (optional)</label>
-              <input className="field" type="date" value={startsAt} onChange={e => setStartsAt(e.target.value)} />
-            </div>
-            <div>
-              <label className="label">Ends (optional)</label>
-              <input className="field" type="date" value={endsAt} onChange={e => setEndsAt(e.target.value)} />
-            </div>
           </div>
 
           {/* Photos */}

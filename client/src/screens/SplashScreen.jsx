@@ -33,11 +33,18 @@ export default function SplashScreen() {
         position: 'relative',
         zIndex: 1,
       }}>
-        <img
-          src="/logo.png"
-          alt="Waterline"
-          style={{ width: 110, height: 'auto', objectFit: 'contain', marginBottom: 22 }}
-        />
+        <div style={{
+          width: 130, height: 130, borderRadius: '50%',
+          background: '#fff', boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginBottom: 22,
+        }}>
+          <img
+            src="/logo.png"
+            alt="Waterline"
+            style={{ width: 100, height: 'auto', objectFit: 'contain' }}
+          />
+        </div>
         <h1 className="serif" style={{
           fontSize: 58,
           fontWeight: 400,

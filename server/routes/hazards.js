@@ -14,7 +14,7 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     const expiresAt = endsAt ? new Date(endsAt) : (() => {
-      const d = new Date(); d.setDate(d.getDate() + 30); return d;
+      const d = new Date(); d.setDate(d.getDate() + 7); return d;
     })();
 
     const hazard = new Hazard({

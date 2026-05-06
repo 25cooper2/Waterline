@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const hazardSchema = new mongoose.Schema({
   reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  hazardType: { type: String, enum: ['debris', 'underwater_obstruction', 'shallow_water', 'weather_warning', 'lock_closure', 'other'], required: true },
+  hazardType: { type: String, enum: ['debris', 'underwater_obstruction', 'shallow_water', 'weather_warning', 'lock_closure', 'obstruction', 'water_level', 'crt_works', 'theft', 'towpath', 'wildlife', 'other'], required: true },
   description: { type: String, required: true },
   lat: { type: Number, required: true },
   lng: { type: Number, required: true },
