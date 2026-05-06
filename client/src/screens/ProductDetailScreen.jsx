@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getCachedLocation, saveDeviceLocation } from '../utils/deviceLocation';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
@@ -22,7 +23,7 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   const [error, setError] = useState('');
-  const [userLoc, setUserLoc] = useState(null);
+  const [userLoc, setUserLoc] = useState(() => getCachedLocation());
   const [imgIndex, setImgIndex] = useState(0);
 
   useEffect(() => {
@@ -41,8 +42,12 @@ export default function ProductDetailScreen() {
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => {}, { enableHighAccuracy: false, timeout: 5000 }
+        (pos) => {
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          saveDeviceLocation(loc.lat, loc.lng);
+          setUserLoc(loc);
+        },
+        () => {}, { enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 }
       );
     }
   }, []);
@@ -181,7 +186,7 @@ export default function ProductDetailScreen() {
             {!isOwner && userLoc && product.lat && product.lng && (() => {
               const mi = distanceMi(userLoc.lat, userLoc.lng, product.lat, product.lng);
               return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>
-                {mi < 0.1 ? 'Here' : `${mi.toFixed(1)} mi away`}
+                {mi < 0.1 ? '< 0.1 mi away' : `${mi.toFixed(1)} mi away`}
               </span>;
             })()}
           </div>

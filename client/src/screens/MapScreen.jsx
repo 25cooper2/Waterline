@@ -8,6 +8,7 @@ import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
 import Plate from '../components/Plate';
 import BottomSheet from '../components/BottomSheet';
+import { getCachedLocation, saveDeviceLocation } from '../utils/deviceLocation';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -230,7 +231,8 @@ export default function MapScreen() {
   const [locationPickMode, setLocationPickMode] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
   const [logbookEntries, setLogbookEntries] = useState([]);
-  const [userLocation, setUserLocation] = useState(null);
+  const cached = getCachedLocation();
+  const [userLocation, setUserLocation] = useState(cached ? [cached.lat, cached.lng] : null);
   const [canalFeatures, setCanalFeatures] = useState([]);  // point features
   const [waterwayLines, setWaterwayLines] = useState([]);  // polyline arrays
   // Default: only locks + water points on. Others off to reduce visual noise.
@@ -276,15 +278,23 @@ export default function MapScreen() {
   const currentMooring = logbookEntries.find(e => !e.endDate && !e.left) || null;
 
   const goToMyLocation = () => {
+    // If we have a cached location, fly there immediately while waiting for GPS
+    const cached = getCachedLocation();
+    if (cached) {
+      const loc = [cached.lat, cached.lng];
+      setUserLocation(loc);
+      setFlyTarget(loc);
+    }
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const loc = [pos.coords.latitude, pos.coords.longitude];
+        saveDeviceLocation(pos.coords.latitude, pos.coords.longitude);
         setUserLocation(loc);
         setFlyTarget(loc);
       },
       () => {},
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   };
 

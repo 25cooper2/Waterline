@@ -5,6 +5,7 @@ import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 import Plate from '../components/Plate';
+import { getCachedLocation, saveDeviceLocation } from '../utils/deviceLocation';
 
 const THING_CATEGORIES = [
   { id: '', label: 'All' },
@@ -50,16 +51,20 @@ export default function MarketScreen() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showLiked, setShowLiked] = useState(false);
-  const [userLoc, setUserLoc] = useState(null);
+  const [userLoc, setUserLoc] = useState(() => getCachedLocation());
 
   const categories = tab === 'things' ? THING_CATEGORIES : tab === 'boats' ? BOAT_CATEGORIES : SERVICE_CATEGORIES;
 
-  // Get user location for distance calc
+  // Get user location for distance calc — use cache immediately, refresh in background
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => {}, { enableHighAccuracy: false, timeout: 5000 }
+        (pos) => {
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          saveDeviceLocation(loc.lat, loc.lng);
+          setUserLoc(loc);
+        },
+        () => {}, { enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 }
       );
     }
   }, []);
@@ -101,7 +106,8 @@ export default function MarketScreen() {
     if (!userLoc || !p.lat || !p.lng) return null;
     const km = distanceKm(userLoc.lat, userLoc.lng, p.lat, p.lng);
     const mi = km * 0.621371;
-    return mi < 0.1 ? 'Here' : `${mi.toFixed(1)} mi`;
+    if (mi < 0.1) return '< 0.1 mi away';
+    return `${mi.toFixed(1)} mi away`;
   };
 
   return (
@@ -240,7 +246,7 @@ function ProductCard({ product, onClick, distance }) {
         </div>
         {distance && (
           <div style={{ fontSize: 12, color: 'var(--pebble)', marginTop: 6 }}>
-            {distance} away
+            {distance}
           </div>
         )}
       </div>
