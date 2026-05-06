@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import User from '../models/User.js';
 import Boat from '../models/Boat.js';
+import Logbook from '../models/Logbook.js';
 import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -94,6 +95,25 @@ router.get('/me', authMiddleware, async (req, res) => {
       userData.boatIndexNumber = boat.boatIndexNumber;
       userData.boatName = boat.boatName;
       userData.isBoatOwner = boat.ownerId.toString() === req.user.userId;
+
+      // Lazy-backfill: if user has no mooring saved, pull from latest open logbook entry
+      if (user.mooringLat == null && boat._id) {
+        const openEntry = await Logbook.findOne({
+          boatId: boat._id,
+          endDate: null,
+          lat: { $ne: null },
+        }).sort({ entryDate: -1 });
+        if (openEntry?.lat != null) {
+          await User.findByIdAndUpdate(req.user.userId, {
+            mooringLat: openEntry.lat,
+            mooringLng: openEntry.lng,
+            mooringLocation: openEntry.startLocation || null,
+          });
+          userData.mooringLat = openEntry.lat;
+          userData.mooringLng = openEntry.lng;
+          userData.mooringLocation = openEntry.startLocation || null;
+        }
+      }
     }
     res.json(userData);
   } catch (error) {

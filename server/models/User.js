@@ -17,6 +17,9 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
   passwordResetToken: { type: String, default: null },
   passwordResetExpires: { type: Date, default: null },
+  mooringLat: { type: Number, default: null },
+  mooringLng: { type: Number, default: null },
+  mooringLocation: { type: String, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

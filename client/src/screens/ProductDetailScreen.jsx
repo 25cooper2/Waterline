@@ -183,8 +183,11 @@ export default function ProductDetailScreen() {
             {isOwner && (
               <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>Your listing</span>
             )}
-            {!isOwner && userLoc && product.lat && product.lng && (() => {
-              const mi = distanceMi(userLoc.lat, userLoc.lng, product.lat, product.lng);
+            {!isOwner && userLoc && (() => {
+              const sellerLat = seller.mooringLat ?? product.lat;
+              const sellerLng = seller.mooringLng ?? product.lng;
+              if (!sellerLat || !sellerLng) return null;
+              const mi = distanceMi(userLoc.lat, userLoc.lng, sellerLat, sellerLng);
               return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>
                 {mi < 0.1 ? '< 0.1 mi away' : `${mi.toFixed(1)} mi away`}
               </span>;

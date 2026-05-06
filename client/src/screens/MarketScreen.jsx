@@ -103,8 +103,12 @@ export default function MarketScreen() {
   });
 
   const getDistance = (p) => {
-    if (!userLoc || !p.lat || !p.lng) return null;
-    const km = distanceKm(userLoc.lat, userLoc.lng, p.lat, p.lng);
+    if (!userLoc) return null;
+    // Prefer seller's live mooring; fall back to the location pinned at listing time
+    const sellerLat = p.sellerId?.mooringLat ?? p.lat;
+    const sellerLng = p.sellerId?.mooringLng ?? p.lng;
+    if (!sellerLat || !sellerLng) return null;
+    const km = distanceKm(userLoc.lat, userLoc.lng, sellerLat, sellerLng);
     const mi = km * 0.621371;
     if (mi < 0.1) return '< 0.1 mi away';
     return `${mi.toFixed(1)} mi away`;

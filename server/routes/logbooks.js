@@ -1,6 +1,7 @@
 import express from 'express';
 import Logbook from '../models/Logbook.js';
 import Boat from '../models/Boat.js';
+import User from '../models/User.js';
 import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -44,6 +45,16 @@ router.post('/', authMiddleware, async (req, res) => {
     });
 
     await logbookEntry.save();
+
+    // If this is an open mooring (no end date) with a location, update the user's live mooring
+    if (!endDate && lat != null && lng != null) {
+      await User.findByIdAndUpdate(req.user.userId, {
+        mooringLat: lat,
+        mooringLng: lng,
+        mooringLocation: startLocation || null,
+      });
+    }
+
     res.status(201).json(logbookEntry);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -127,6 +138,19 @@ router.put('/:logbookId', authMiddleware, async (req, res) => {
     entry.updatedAt = new Date();
 
     await entry.save();
+
+    // Update user's live mooring if this entry is now open with a location
+    const finalLat = entry.lat;
+    const finalLng = entry.lng;
+    const finalEndDate = entry.endDate;
+    if (!finalEndDate && finalLat != null && finalLng != null) {
+      await User.findByIdAndUpdate(req.user.userId, {
+        mooringLat: finalLat,
+        mooringLng: finalLng,
+        mooringLocation: entry.startLocation || null,
+      });
+    }
+
     res.json(entry);
   } catch (error) {
     res.status(500).json({ error: error.message });
