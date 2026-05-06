@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { compressMany } from '../utils/imageCompress';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
@@ -65,12 +66,8 @@ export default function CreateListingScreen() {
     const files = Array.from(e.target.files || []);
     const remaining = 4 - photos.length;
     const toAdd = files.slice(0, remaining);
-    const dataUrls = await Promise.all(toAdd.map(f => new Promise(res => {
-      const r = new FileReader();
-      r.onload = () => res(r.result);
-      r.readAsDataURL(f);
-    })));
-    setPhotos(p => [...p, ...dataUrls]);
+    const dataUrls = await compressMany(toAdd, { maxDim: 1400, quality: 0.8 });
+    setPhotos(p => [...p, ...dataUrls.filter(Boolean)]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 

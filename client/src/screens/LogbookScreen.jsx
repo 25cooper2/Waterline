@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
 import LoginWall from '../components/LoginWall';
+import { compressMany } from '../utils/imageCompress';
 
 /* ── inline styles ─────────────────────────────────────────────── */
 
@@ -174,12 +175,8 @@ export default function LogbookScreen() {
     const files = Array.from(e.target.files || []);
     const remaining = 4 - (form.photos?.length || 0);
     const toAdd = files.slice(0, remaining);
-    const dataUrls = await Promise.all(toAdd.map(f => new Promise(res => {
-      const r = new FileReader();
-      r.onload = () => res(r.result);
-      r.readAsDataURL(f);
-    })));
-    setForm(f => ({ ...f, photos: [...(f.photos || []), ...dataUrls] }));
+    const dataUrls = await compressMany(toAdd, { maxDim: 1400, quality: 0.8 });
+    setForm(f => ({ ...f, photos: [...(f.photos || []), ...dataUrls.filter(Boolean)] }));
     if (photoInputRef.current) photoInputRef.current.value = '';
   };
 

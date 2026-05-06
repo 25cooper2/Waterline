@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
+import { compressImage } from '../utils/imageCompress';
 
 export default function ProfileIdentityScreen() {
   const nav = useNavigate();
@@ -24,13 +25,14 @@ export default function ProfileIdentityScreen() {
   const handlePhoto = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setError('Photo must be under 2MB');
-      return;
+    setError('');
+    try {
+      // Smaller dim for avatars — they're displayed at ~110px max
+      const dataUrl = await compressImage(file, { maxDim: 600, quality: 0.85 });
+      set('profilePhotoUrl', dataUrl);
+    } catch {
+      setError('Could not read that image — try a different one.');
     }
-    const r = new FileReader();
-    r.onload = () => set('profilePhotoUrl', r.result);
-    r.readAsDataURL(file);
   };
 
   const save = async () => {
