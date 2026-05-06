@@ -8,7 +8,7 @@ const router = express.Router();
 // Create product
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { title, description, category, price, condition, boatIndexNumber, listingType, lat, lng } = req.body;
+    const { title, description, category, price, condition, boatIndexNumber, listingType, lat, lng, images } = req.body;
 
     if (!title || !description || price === undefined) {
       return res.status(400).json({ error: 'Title, description, and price required' });
@@ -25,6 +25,7 @@ router.post('/', authMiddleware, async (req, res) => {
       boatIndexNumber: boatIndexNumber || null,
       lat: lat ?? null,
       lng: lng ?? null,
+      images: Array.isArray(images) ? images : [],
     });
 
     await product.save();

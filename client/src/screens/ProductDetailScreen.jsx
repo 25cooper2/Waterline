@@ -151,11 +151,17 @@ export default function ProductDetailScreen() {
             <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px', textTransform: 'capitalize' }}>
               {condition}
             </span>
-            {userLoc && product.lat && product.lng && (
-              <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>
-                {distanceMi(userLoc.lat, userLoc.lng, product.lat, product.lng).toFixed(1)} mi
-              </span>
-            )}
+            {(() => {
+              if (user && product.sellerId?._id === user._id) {
+                return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>Your listing</span>;
+              }
+              if (userLoc && product.lat && product.lng) {
+                return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>
+                  {distanceMi(userLoc.lat, userLoc.lng, product.lat, product.lng).toFixed(1)} mi
+                </span>;
+              }
+              return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px', color: 'var(--silt)' }}>Distance unavailable</span>;
+            })()}
           </div>
 
           {/* Description */}

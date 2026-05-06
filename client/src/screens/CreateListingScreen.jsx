@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
@@ -58,6 +58,21 @@ export default function CreateListingScreen() {
   const [pickup, setPickup] = useState('boat');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [photos, setPhotos] = useState([]); // base64 data URLs
+  const fileInputRef = useRef(null);
+
+  const handlePhotoUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    const remaining = 4 - photos.length;
+    const toAdd = files.slice(0, remaining);
+    const dataUrls = await Promise.all(toAdd.map(f => new Promise(res => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.readAsDataURL(f);
+    })));
+    setPhotos(p => [...p, ...dataUrls]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
@@ -76,6 +91,7 @@ export default function CreateListingScreen() {
         ...form,
         price: parseFloat(form.price) || 0,
         listingType,
+        images: photos,
       });
       nav('/market');
     } catch (e) {
@@ -109,19 +125,32 @@ export default function CreateListingScreen() {
 
         {/* Photo grid */}
         <div style={{ marginBottom: 24 }}>
-          <div className="label">Photos</div>
+          <div className="label">Photos ({photos.length}/4)</div>
+          <input ref={fileInputRef} type="file" accept="image/*" multiple
+            onChange={handlePhotoUpload} style={{ display: 'none' }} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-            <div style={{
-              aspectRatio: '1', borderRadius: 'var(--r-md)',
-              border: '2px dashed var(--reed)', background: 'var(--linen)',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              gap: 4, cursor: 'pointer',
-            }}>
-              <Icon name="camera" size={22} color="var(--pebble)" />
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--pebble)' }}>Add</span>
-            </div>
-            {[1, 2, 3].map(i => (
+            {photos.map((src, i) => (
               <div key={i} style={{
+                aspectRatio: '1', borderRadius: 'var(--r-md)',
+                background: `url(${src}) center/cover`, border: '1px solid var(--reed)',
+                position: 'relative', cursor: 'pointer',
+              }} onClick={() => setPhotos(p => p.filter((_, idx) => idx !== i))}>
+                <div style={{ position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>×</div>
+              </div>
+            ))}
+            {photos.length < 4 && (
+              <div onClick={() => fileInputRef.current?.click()} style={{
+                aspectRatio: '1', borderRadius: 'var(--r-md)',
+                border: '2px dashed var(--reed)', background: 'var(--linen)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: 4, cursor: 'pointer',
+              }}>
+                <Icon name="camera" size={22} color="var(--pebble)" />
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--pebble)' }}>Add</span>
+              </div>
+            )}
+            {Array.from({ length: Math.max(0, 3 - photos.length) }).map((_, i) => (
+              <div key={`empty-${i}`} style={{
                 aspectRatio: '1', borderRadius: 'var(--r-md)',
                 background: 'var(--linen)', border: '1px solid var(--reed)',
               }} />

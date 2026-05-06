@@ -84,25 +84,37 @@ function makeLockIcon(label) {
   });
 }
 
-function MapViewTracker({ onViewChange, onCenterChange }) {
+function MapViewTracker({ onViewChange, onCenterChange, onZoomChange }) {
   const map = useMap();
   const toBboxKey = (b) => {
     const r = (v) => Math.round(v * 1000) / 1000;
     return `${r(b.getSouth())},${r(b.getWest())},${r(b.getNorth())},${r(b.getEast())}`;
   };
+  const persist = (m) => {
+    try {
+      const c = m.getCenter();
+      localStorage.setItem('waterline_map_view', JSON.stringify({
+        center: [c.lat, c.lng], zoom: m.getZoom(),
+      }));
+    } catch {}
+  };
   useEffect(() => {
     onViewChange(toBboxKey(map.getBounds()));
     const c = map.getCenter();
     onCenterChange([c.lat, c.lng]);
+    onZoomChange?.(map.getZoom());
   }, []);
   useMapEvents({
     moveend: (e) => {
       onViewChange(toBboxKey(e.target.getBounds()));
       const c = e.target.getCenter();
       onCenterChange([c.lat, c.lng]);
+      persist(e.target);
     },
     zoomend: (e) => {
       onViewChange(toBboxKey(e.target.getBounds()));
+      onZoomChange?.(e.target.getZoom());
+      persist(e.target);
     },
   });
   return null;
@@ -114,6 +126,63 @@ function FlyTo({ center, zoom }) {
   return null;
 }
 
+// Parse KML (Google My Maps export format)
+function parseKML(xmlString) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlString, 'application/xml');
+
+  if (doc.getElementsByTagName('parsererror').length > 0) {
+    console.warn('KML parse error');
+    return [];
+  }
+
+  const placemarks = doc.getElementsByTagName('Placemark');
+  const pins = [];
+
+  for (const pm of placemarks) {
+    const name = pm.getElementsByTagName('name')[0]?.textContent || 'Untitled';
+    const pointEl = pm.getElementsByTagName('Point')[0];
+
+    if (!pointEl) continue;
+
+    const coords = pointEl.getElementsByTagName('coordinates')[0]?.textContent.trim();
+    if (!coords) continue;
+
+    const [lng, lat] = coords.split(',').map(x => parseFloat(x.trim()));
+    if (isNaN(lat) || isNaN(lng)) continue;
+
+    pins.push({ id: `mymaps_${Math.random()}`, lat, lng, name, source: 'mymaps' });
+  }
+
+  return pins;
+}
+
+// Parse GeoJSON
+function parseGeoJSON(jsonString) {
+  try {
+    const geo = JSON.parse(jsonString);
+    const pins = [];
+
+    if (geo.type === 'FeatureCollection' && Array.isArray(geo.features)) {
+      for (const feature of geo.features) {
+        const { geometry, properties } = feature;
+        if (geometry.type !== 'Point') continue;
+
+        const [lng, lat] = geometry.coordinates;
+        if (isNaN(lat) || isNaN(lng)) continue;
+
+        const name = properties?.name || properties?.title || 'Untitled';
+        pins.push({ id: `mymaps_${Math.random()}`, lat, lng, name, source: 'mymaps' });
+      }
+    }
+
+    return pins;
+  } catch (e) {
+    console.warn('GeoJSON parse error:', e);
+    return [];
+  }
+}
+
 export default function MapScreen() {
   const { user } = useAuth();
   const nav = useNavigate();
@@ -123,7 +192,21 @@ export default function MapScreen() {
   const [searchResults, setSearchResults] = useState([]);
   const [flyTarget, setFlyTarget] = useState(null);
   const [filters, setFilters] = useState({ hazards: true, friends: true, services: true, logbook: false });
-  const [mapCenter, setMapCenter] = useState([52.5, -1.8]);
+  // Restore last view from localStorage so we don't always recenter on Birmingham
+  const [mapCenter, setMapCenter] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('waterline_map_view') || 'null');
+      if (saved?.center) return saved.center;
+    } catch {}
+    return [52.5, -1.8];
+  });
+  const initialZoom = (() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('waterline_map_view') || 'null');
+      return saved?.zoom ?? 9;
+    } catch { return 9; }
+  })();
+  const [mapZoom, setMapZoom] = useState(initialZoom);
   const [bboxKey, setBboxKey] = useState(null);
   const [locationPickMode, setLocationPickMode] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
@@ -131,12 +214,21 @@ export default function MapScreen() {
   const [userLocation, setUserLocation] = useState(null);
   const [canalFeatures, setCanalFeatures] = useState([]);  // point features
   const [waterwayLines, setWaterwayLines] = useState([]);  // polyline arrays
+  // Default: only locks + water points on. Others off to reduce visual noise.
   const [canalFilters, setCanalFilters] = useState(
-    Object.fromEntries(Object.keys(FEATURE_META).map(k => [k, true]))
+    Object.fromEntries(Object.keys(FEATURE_META).map(k => [k, k === 'lock' || k === 'water']))
   );
   const [canalPanelOpen, setCanalPanelOpen] = useState(false);
+  const [myMapsPins, setMyMapsPins] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('waterline_mymaps') || '[]');
+    } catch {
+      return [];
+    }
+  });
   const searchTimeout = useRef(null);
   const overpassTimeout = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Auto-enter location pick if navigated from logbook
   useEffect(() => {
@@ -171,6 +263,41 @@ export default function MapScreen() {
     );
   };
 
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result;
+      if (!content) return;
+
+      let pins = [];
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
+
+      if (fileExt === 'kml') {
+        pins = parseKML(content);
+      } else if (fileExt === 'geojson' || fileExt === 'json') {
+        pins = parseGeoJSON(content);
+      } else {
+        // Try both parsers
+        pins = parseKML(content);
+        if (pins.length === 0) pins = parseGeoJSON(content);
+      }
+
+      if (pins.length > 0) {
+        const updated = [...myMapsPins, ...pins];
+        setMyMapsPins(updated);
+        localStorage.setItem('waterline_mymaps', JSON.stringify(updated));
+        alert(`✓ Imported ${pins.length} pins from ${file.name}`);
+      } else {
+        alert('No valid pins found in file');
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   // Fetch canal features whenever visible bounds change (bboxKey is "s,w,n,e" string)
   useEffect(() => {
     if (!bboxKey) return;
@@ -179,15 +306,21 @@ export default function MapScreen() {
       try {
         const bbox = bboxKey; // already "s,w,n,e"
 
-        // Canal/river ways + lock=yes canal ways (for lock dots) + nodes for point features
-        const oq = `[out:json][timeout:15];
-(
-  way["waterway"~"^(canal|river)$"](${bbox});
-  way["waterway"="canal"]["lock"="yes"](${bbox});
+        // Always fetch navigable waterways (canals + rivers with boat/motorboat=yes).
+        // Features only when zoomed in enough (town scale, zoom >= 12) to keep things fast.
+        const includeFeatures = mapZoom >= 12;
+        const featureBlock = includeFeatures ? `
   node["amenity"~"^(toilets|water_point|waste_disposal|recycling|fuel)$"](${bbox});
   node["leisure"="marina"](${bbox});
   node["waterway"~"^(weir|dam|sluice_gate|turning_point)$"](${bbox});
-  node["mooring"]["mooring"!="no"](${bbox});
+  node["mooring"]["mooring"!="no"](${bbox});` : '';
+
+        const oq = `[out:json][timeout:15];
+(
+  way["waterway"="canal"](${bbox});
+  way["waterway"="river"]["boat"~"yes|designated|permissive"](${bbox});
+  way["waterway"="river"]["motorboat"~"yes|designated|permissive"](${bbox});
+  way["waterway"="canal"]["lock"="yes"](${bbox});${featureBlock}
 );
 out center geom;`;
 
@@ -249,7 +382,7 @@ out center geom;`;
         console.warn('Overpass fetch failed:', err);
       }
     }, 600);
-  }, [bboxKey]);
+  }, [bboxKey, mapZoom]);
 
   // Geocode search via Nominatim (debounced)
   const onSearchChange = (val) => {
@@ -297,14 +430,14 @@ out center geom;`;
 
   return (
     <div className="screen" style={{ position: 'relative' }}>
-      <MapContainer center={mapCenter} zoom={9} style={{ flex: 1, width: '100%', minHeight: 0, height: '100%' }} zoomControl={false}>
+      <MapContainer center={mapCenter} zoom={initialZoom} style={{ flex: 1, width: '100%', minHeight: 0, height: '100%' }} zoomControl={false}>
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
           subdomains="abcd"
           maxZoom={19}
         />
-        <MapViewTracker onViewChange={setBboxKey} onCenterChange={setMapCenter} />
+        <MapViewTracker onViewChange={setBboxKey} onCenterChange={setMapCenter} onZoomChange={setMapZoom} />
         <FlyTo center={flyTarget} />
 
         {/* Waterway lines — rendered first so they sit behind all markers */}
@@ -327,6 +460,13 @@ out center geom;`;
             </Marker>
           );
         })}
+
+        {/* Imported My Maps pins */}
+        {myMapsPins.map(p => (
+          <Marker key={p.id} position={[p.lat, p.lng]} icon={makeEmojiIcon('📍')}>
+            <Popup><div style={{ fontSize: 12 }}><strong>{p.name}</strong><br /><small style={{color:'var(--silt)'}}>Imported</small></div></Popup>
+          </Marker>
+        ))}
 
         {/* Hazard circles */}
         {visibleHazards.map(h => (
@@ -408,8 +548,25 @@ out center geom;`;
       {!locationPickMode && (
         <div style={{ position: 'absolute', right: 12, top: 120, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <CtrlBtn onClick={goToMyLocation}><Icon name="compass" size={20} color="var(--moss)" stroke={1.8} /></CtrlBtn>
+          <CtrlBtn onClick={() => fileInputRef.current?.click()} title="Import pins from Google My Maps">
+            <span style={{ fontSize: 18 }}>📲</span>
+          </CtrlBtn>
+          {myMapsPins.length > 0 && (
+            <CtrlBtn onClick={() => { setMyMapsPins([]); localStorage.removeItem('waterline_mymaps'); }} title="Clear imported pins">
+              <span style={{ fontSize: 16, cursor: 'pointer' }}>✕</span>
+            </CtrlBtn>
+          )}
         </div>
       )}
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".kml,.geojson,.json"
+        style={{ display: 'none' }}
+        onChange={handleFileUpload}
+      />
 
       {/* Canal features filter — collapsible, left side */}
       {!locationPickMode && (
