@@ -22,6 +22,7 @@ import TradeSetupScreen from './screens/TradeSetupScreen';
 import HazardDetailScreen from './screens/HazardDetailScreen';
 import ReportHazardScreen from './screens/ReportHazardScreen';
 import AdminScreen from './screens/AdminScreen';
+import PublicProfileScreen from './screens/PublicProfileScreen';
 import WelcomeScreen from './screens/onboarding/WelcomeScreen';
 import OnbProfileScreen from './screens/onboarding/OnbProfileScreen';
 import OnbBoatScreen from './screens/onboarding/OnbBoatScreen';
@@ -81,6 +82,7 @@ export default function App() {
       <Route path="/friends" element={<FriendsScreen />} />
       <Route path="/trade-setup" element={<TradeSetupScreen />} />
       <Route path="/admin" element={<AdminScreen />} />
+      <Route path="/profile/:userId" element={<PublicProfileScreen />} />
 
       {/* Main tabs with tab bar */}
       <Route element={<Layout />}>
