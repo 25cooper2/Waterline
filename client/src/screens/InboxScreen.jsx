@@ -621,9 +621,9 @@ function PostCard({ post, onTagClick, onAuthorClick, onOpen }) {
           </div>
           <div style={{ fontSize: 14.5, color: 'var(--ink)', lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{post.body}</div>
           {post.photos?.length > 0 && (
-            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
               {post.photos.map((src, i) => (
-                <div key={i} style={{ width: 96, height: 96, borderRadius: 8, background: `url(${src}) center/cover`, border: '1px solid var(--reed)' }} />
+                <div key={i} style={{ width: '100%', aspectRatio: '4 / 3', borderRadius: 8, background: `url(${src}) center/cover`, border: '1px solid var(--reed)' }} />
               ))}
             </div>
           )}
