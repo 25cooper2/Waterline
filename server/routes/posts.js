@@ -50,10 +50,11 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // List posts. Query: lat, lng, radius (miles), tag, q (text), followingOnly, authorId, limit
-router.get('/', authMiddleware, async (req, res) => {
+// Public — no auth required to read the feed.
+router.get('/', async (req, res) => {
   try {
     const { lat, lng, radius, tag, q, followingOnly, authorId, limit } = req.query;
-    const filter = {};
+    const filter = { reportStatus: 'active' };
 
     if (tag) filter.tags = String(tag).toLowerCase().trim();
     if (authorId) filter.authorId = authorId;
@@ -62,11 +63,16 @@ router.get('/', authMiddleware, async (req, res) => {
       { tags: { $regex: q.replace(/^#/, '').toLowerCase(), $options: 'i' } },
     ];
 
-    if (followingOnly === 'true') {
-      const follows = await Follow.find({ followerId: req.user.userId }).select('followingId');
-      const ids = follows.map(f => f.followingId);
-      ids.push(req.user.userId);
-      filter.authorId = { $in: ids };
+    if (followingOnly === 'true' && req.headers.authorization) {
+      try {
+        const jwt = (await import('jsonwebtoken')).default;
+        const token = req.headers.authorization.replace('Bearer ', '');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+        const follows = await Follow.find({ followerId: decoded.userId }).select('followingId');
+        const ids = follows.map(f => f.followingId);
+        ids.push(decoded.userId);
+        filter.authorId = { $in: ids };
+      } catch {}
     }
 
     let posts = await Post.find(filter)
@@ -88,13 +94,69 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Single post
+// Single post (with replies populated)
 router.get('/:postId', async (req, res) => {
   try {
     const post = await Post.findById(req.params.postId)
-      .populate('authorId', 'displayName username profilePhotoUrl boatIndexNumber boatName');
+      .populate('authorId', 'displayName username profilePhotoUrl boatIndexNumber boatName')
+      .populate('replies.authorId', 'displayName username profilePhotoUrl boatIndexNumber');
     if (!post) return res.status(404).json({ error: 'Post not found' });
     res.json(post);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Reply to a post
+router.post('/:postId/reply', authMiddleware, async (req, res) => {
+  try {
+    const { body } = req.body;
+    if (!body || !body.trim()) return res.status(400).json({ error: 'Reply body required' });
+    const post = await Post.findById(req.params.postId);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (post.reportStatus !== 'active') return res.status(403).json({ error: 'Post unavailable' });
+    post.replies.push({ authorId: req.user.userId, body: body.trim() });
+    post.replyCount = post.replies.length;
+    await post.save();
+    await post.populate('replies.authorId', 'displayName username profilePhotoUrl boatIndexNumber');
+    res.status(201).json(post.replies[post.replies.length - 1]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Report a post — auto-removes pending review
+router.post('/:postId/report', authMiddleware, async (req, res) => {
+  try {
+    const { reason } = req.body || {};
+    const post = await Post.findById(req.params.postId);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (!post.reportedBy.some(id => id.toString() === req.user.userId)) {
+      post.reportedBy.push(req.user.userId);
+    }
+    if (reason) post.reportReasons.push(String(reason).slice(0, 200));
+    post.reportStatus = 'pending_review';
+    await post.save();
+    res.json({ message: 'Reported. Post hidden pending review.' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Tag autocomplete — returns matching tags by prefix
+router.get('/_/tags/search', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').replace(/^#/, '').toLowerCase().trim();
+    if (!q) return res.json([]);
+    const results = await Post.aggregate([
+      { $match: { reportStatus: 'active', tags: { $regex: '^' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') } } },
+      { $unwind: '$tags' },
+      { $match: { tags: { $regex: '^' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') } } },
+      { $group: { _id: '$tags', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 8 },
+    ]);
+    res.json(results.map(r => ({ tag: r._id, count: r.count })));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

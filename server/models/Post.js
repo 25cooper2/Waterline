@@ -8,6 +8,15 @@ const postSchema = new mongoose.Schema({
   lng: { type: Number, default: null },
   locationName: { type: String, default: null },
   photos: [{ type: String }],
+  replies: [{
+    authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    body: { type: String, required: true, maxlength: 1000 },
+    createdAt: { type: Date, default: Date.now },
+  }],
+  replyCount: { type: Number, default: 0 },
+  reportStatus: { type: String, enum: ['active', 'pending_review', 'removed'], default: 'active' },
+  reportedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  reportReasons: [{ type: String }],
   createdAt: { type: Date, default: Date.now },
 });
 

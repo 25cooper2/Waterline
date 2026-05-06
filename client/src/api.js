@@ -84,6 +84,10 @@ export const api = {
   createPost: (body) => req('/api/posts', { method: 'POST', body: JSON.stringify(body) }),
   deletePost: (id) => req(`/api/posts/${id}`, { method: 'DELETE' }),
   trendingTags: () => req('/api/posts/_/tags/trending'),
+  searchTags: (q) => req(`/api/posts/_/tags/search?q=${encodeURIComponent(q)}`),
+  getPost: (id) => req(`/api/posts/${id}`),
+  replyToPost: (id, body) => req(`/api/posts/${id}/reply`, { method: 'POST', body: JSON.stringify({ body }) }),
+  reportPost: (id, reason) => req(`/api/posts/${id}/report`, { method: 'POST', body: JSON.stringify({ reason }) }),
 
   // Follows
   getPublicProfile: (userId) => req(`/api/users/${userId}`),
