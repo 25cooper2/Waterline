@@ -67,6 +67,13 @@ export const api = {
   updateLogEntry: (id, body) => req(`/api/logbooks/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteLogEntry: (id) => req(`/api/logbooks/${id}`, { method: 'DELETE' }),
 
+  // Admin
+  adminStats: () => req('/api/admin/stats'),
+  adminUsers: () => req('/api/admin/users'),
+  adminListings: () => req('/api/admin/listings'),
+  adminRemovals: () => req('/api/admin/analytics/removals'),
+  adminPromote: (email) => req('/api/admin/promote', { method: 'POST', body: JSON.stringify({ email }) }),
+
   // Follows
   follow: (userId) => req(`/api/users/${userId}/follow`, { method: 'POST' }),
   unfollow: (userId) => req(`/api/users/${userId}/follow`, { method: 'DELETE' }),

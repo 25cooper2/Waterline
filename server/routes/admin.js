@@ -1,6 +1,10 @@
 import express from 'express';
 import Boat from '../models/Boat.js';
 import User from '../models/User.js';
+import Product from '../models/Product.js';
+import Logbook from '../models/Logbook.js';
+import Hazard from '../models/Hazard.js';
+import ListingAnalytics from '../models/ListingAnalytics.js';
 import { adminMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -108,26 +112,111 @@ router.post('/certifications/:boatId/reject', adminMiddleware, async (req, res) 
   }
 });
 
-// Get admin statistics
+// Get admin statistics (expanded)
 router.get('/stats', adminMiddleware, async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments();
-    const verifiedUsers = await User.countDocuments({ isVerified: true });
-    const totalBoats = await Boat.countDocuments();
-    const pendingBoats = await Boat.countDocuments({ verificationStatus: 'pending_approval' });
-    const verifiedBoats = await Boat.countDocuments({ verificationStatus: 'verified' });
+    const [
+      totalUsers, verifiedUsers,
+      totalBoats, pendingBoats, verifiedBoats,
+      totalListings, activeListings,
+      totalLogEntries, totalHazards,
+      totalRemovals,
+    ] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ isVerified: true }),
+      Boat.countDocuments(),
+      Boat.countDocuments({ verificationStatus: 'pending_approval' }),
+      Boat.countDocuments({ verificationStatus: 'verified' }),
+      Product.countDocuments(),
+      Product.countDocuments({ isAvailable: true }),
+      Logbook.countDocuments(),
+      Hazard.countDocuments(),
+      ListingAnalytics.countDocuments(),
+    ]);
+
+    // Sign-ups in last 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000);
+    const newUsers30d = await User.countDocuments({ createdAt: { $gte: thirtyDaysAgo } });
+    const newListings30d = await Product.countDocuments({ createdAt: { $gte: thirtyDaysAgo } });
+
+    // Removal reason breakdown
+    const removalBreakdown = await ListingAnalytics.aggregate([
+      { $group: { _id: '$removalReason', count: { $sum: 1 }, avgDaysLive: { $avg: '$daysLive' } } },
+    ]);
+
+    // Avg days live overall
+    const avgDaysLiveResult = await ListingAnalytics.aggregate([
+      { $group: { _id: null, avg: { $avg: '$daysLive' } } },
+    ]);
+    const avgDaysLive = avgDaysLiveResult[0]?.avg ?? null;
+
+    // Top categories removed
+    const topCategories = await ListingAnalytics.aggregate([
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+    ]);
 
     res.json({
-      users: {
-        total: totalUsers,
-        verified: verifiedUsers
-      },
-      boats: {
-        total: totalBoats,
-        pending: pendingBoats,
-        verified: verifiedBoats
-      }
+      users: { total: totalUsers, verified: verifiedUsers, new30d: newUsers30d },
+      boats: { total: totalBoats, pending: pendingBoats, verified: verifiedBoats },
+      listings: { total: totalListings, active: activeListings, new30d: newListings30d },
+      logbook: { total: totalLogEntries },
+      hazards: { total: totalHazards },
+      removals: { total: totalRemovals, avgDaysLive, breakdown: removalBreakdown, topCategories },
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Recent users
+router.get('/users', adminMiddleware, async (req, res) => {
+  try {
+    const users = await User.find()
+      .select('displayName username email isVerified createdAt mooringLocation')
+      .sort({ createdAt: -1 })
+      .limit(50);
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Recent listings
+router.get('/listings', adminMiddleware, async (req, res) => {
+  try {
+    const listings = await Product.find()
+      .populate('sellerId', 'displayName username')
+      .select('title listingType category price isAvailable createdAt sellerId')
+      .sort({ createdAt: -1 })
+      .limit(50);
+    res.json(listings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Removal analytics log
+router.get('/analytics/removals', adminMiddleware, async (req, res) => {
+  try {
+    const records = await ListingAnalytics.find()
+      .populate('sellerId', 'displayName username')
+      .sort({ removedAt: -1 })
+      .limit(100);
+    res.json(records);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Promote user to admin (by email)
+router.post('/promote', adminMiddleware, async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOneAndUpdate({ email }, { role: 'admin' }, { new: true });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ message: `${user.email} promoted to admin` });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

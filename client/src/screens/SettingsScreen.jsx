@@ -53,6 +53,16 @@ export default function SettingsScreen() {
           </div>
         </div>
 
+        {/* Admin section — only visible to admins */}
+        {user?.role === 'admin' && (
+          <div style={{ padding: '20px 20px 0' }}>
+            <div className="label" style={{ marginBottom: 10 }}>Admin</div>
+            <div className="card">
+              <SettingsRow icon="settings" label="Admin dashboard" meta="Internal" onClick={() => nav('/admin')} />
+            </div>
+          </div>
+        )}
+
         {/* Hidden section */}
         <div style={{ padding: '20px 20px 0' }}>
           <div className="label" style={{ marginBottom: 10 }}>Hidden</div>
