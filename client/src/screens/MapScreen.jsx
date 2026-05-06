@@ -9,7 +9,27 @@ import Icon from '../components/Icon';
 import Plate from '../components/Plate';
 import BottomSheet from '../components/BottomSheet';
 import { getCachedLocation, saveDeviceLocation } from '../utils/deviceLocation';
-import { routeAlongWaterway } from '../utils/waterwayRouter';
+import { routeAlongWaterway, hav } from '../utils/waterwayRouter';
+
+// Path length in miles for a [[lat,lng]…] polyline
+function pathLengthMiles(coords) {
+  let m = 0;
+  for (let i = 1; i < coords.length; i++) {
+    m += hav(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]);
+  }
+  return +(m * 0.000621371).toFixed(2);
+}
+
+// Count distinct lock features whose position lies within ~35m of the path
+function countLocksOnPath(coords, lockFeatures) {
+  let n = 0;
+  for (const lock of lockFeatures) {
+    for (const [lat, lng] of coords) {
+      if (hav(lat, lng, lock.lat, lock.lng) < 35) { n++; break; }
+    }
+  }
+  return n;
+}
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -276,6 +296,8 @@ export default function MapScreen() {
   const [journeyRoutes, setJourneyRoutes] = useState([]); // [[lat,lng][]|null, …]
   const [journeyWaypoints, setJourneyWaypoints] = useState({}); // segIdx → {lat,lng}
   const journeyWaypointsRef = useRef({}); // kept in sync; safe to read inside async callbacks
+  const routesCacheRef = useRef({}); // entryId → { coords, fromId } in-session cache
+  const canalFeaturesRef = useRef([]); // mirrored ref so async lock-counting reads latest
 
   const searchTimeout = useRef(null);
   const overpassTimeout = useRef(null);
@@ -288,6 +310,12 @@ export default function MapScreen() {
       // Fly to existing pin if provided so the user starts where they left off
       const { lat, lng } = routeLocation.state;
       if (lat != null && lng != null) setFlyTarget([lat, lng]);
+      window.history.replaceState({}, '');
+    }
+    // "View on map" from the logbook screen — show only the logbook layer
+    if (routeLocation.state?.logbookOnly) {
+      setFilters({ hazards: false, friends: false, services: false, logbook: true });
+      setCanalFilters(Object.fromEntries(Object.keys(FEATURE_META).map(k => [k, false])));
       window.history.replaceState({}, '');
     }
   }, []);
@@ -304,7 +332,23 @@ export default function MapScreen() {
       .catch(() => {});
   }, [user]);
 
-  // Compute canal routes for every pair of consecutive logbook entries
+  // Mirror canalFeatures into a ref so async lock-counting always sees latest
+  useEffect(() => { canalFeaturesRef.current = canalFeatures; }, [canalFeatures]);
+
+  // Persist a freshly-computed segment to the DB so the next page load reuses it
+  const saveSegment = (toEntryId, fromEntryId, route, via = null) => {
+    const distance = pathLengthMiles(route);
+    const locks = countLocksOnPath(route, canalFeaturesRef.current.filter(f => f.ftype === 'lock'));
+    api.updateLogEntry(toEntryId, {
+      routeCoords: route, routeFromEntry: fromEntryId,
+      routeDistance: distance, routeLocks: locks, routeWaypoint: via,
+    }).catch(() => {});
+  };
+
+  // Compute canal routes for every pair of consecutive logbook entries —
+  // prefer (1) in-session ref cache, (2) DB-cached coords on the entry, then
+  // fall back to live Overpass+Dijkstra computation. Saves freshly-computed
+  // routes back to the entry so this only happens once per pair, ever.
   useEffect(() => {
     if (!filters.logbook || logbookEntries.length < 2) {
       setJourneyRoutes([]);
@@ -314,17 +358,32 @@ export default function MapScreen() {
     const sorted = [...logbookEntries].sort(
       (a, b) => new Date(a.entryDate || a.arrived) - new Date(b.entryDate || b.arrived)
     );
-    Promise.all(
-      sorted.slice(0, -1).map((e, i) =>
-        routeAlongWaterway(
-          e.lat, e.lng,
-          sorted[i + 1].lat, sorted[i + 1].lng,
-          journeyWaypointsRef.current[i] || null
-        ).catch(() => null)
-      )
-    ).then(routes => {
-      if (!cancelled) setJourneyRoutes(routes);
+    const segments = sorted.slice(0, -1).map((from, i) => ({ from, to: sorted[i + 1], i }));
+
+    // Resolve what we already have right now
+    const initial = segments.map(({ from, to, i }) => {
+      const session = routesCacheRef.current[to._id];
+      if (session && session.fromId === from._id) return session.coords;
+      if (
+        Array.isArray(to.routeCoords) && to.routeCoords.length > 1 &&
+        String(to.routeFromEntry) === String(from._id) &&
+        !journeyWaypointsRef.current[i]
+      ) return to.routeCoords;
+      return null;
     });
+    setJourneyRoutes(initial);
+
+    // Compute the rest in the background
+    segments.forEach(async ({ from, to, i }) => {
+      if (initial[i]) return;
+      const via = journeyWaypointsRef.current[i] || null;
+      const route = await routeAlongWaterway(from.lat, from.lng, to.lat, to.lng, via).catch(() => null);
+      if (cancelled || !route) return;
+      routesCacheRef.current[to._id] = { coords: route, fromId: from._id };
+      setJourneyRoutes(prev => { const next = [...prev]; next[i] = route; return next; });
+      saveSegment(to._id, from._id, route, via);
+    });
+
     return () => { cancelled = true; };
   }, [filters.logbook, logbookEntries]);
 
@@ -334,17 +393,13 @@ export default function MapScreen() {
       (a, b) => new Date(a.entryDate || a.arrived) - new Date(b.entryDate || b.arrived)
     );
     if (segIdx >= sorted.length - 1) return;
-    routeAlongWaterway(
-      sorted[segIdx].lat, sorted[segIdx].lng,
-      sorted[segIdx + 1].lat, sorted[segIdx + 1].lng,
-      via
-    )
+    const from = sorted[segIdx], to = sorted[segIdx + 1];
+    routeAlongWaterway(from.lat, from.lng, to.lat, to.lng, via)
       .then(route => {
-        setJourneyRoutes(prev => {
-          const next = [...prev];
-          next[segIdx] = route;
-          return next;
-        });
+        if (!route) return;
+        routesCacheRef.current[to._id] = { coords: route, fromId: from._id };
+        setJourneyRoutes(prev => { const next = [...prev]; next[segIdx] = route; return next; });
+        saveSegment(to._id, from._id, route, via);
       })
       .catch(() => {});
   };
@@ -694,7 +749,18 @@ out center geom qt;`;
               <Polyline
                 key={`journey-seg-${i}`}
                 positions={positions}
-                pathOptions={{ color: '#111', weight: 2.5, opacity: 0.7, dashArray: route ? undefined : '6 5' }}
+                // markerPane (z-index 600) so the journey sits above the cyan
+                // waterway lines (overlayPane, z-index 400). Dotted black, a
+                // touch thicker than the previous 2.5 so it reads clearly.
+                pane="markerPane"
+                pathOptions={{
+                  color: '#111',
+                  weight: 4,
+                  opacity: 0.92,
+                  lineCap: 'round',
+                  // routed = tight dot pattern; fallback = wider dashes
+                  dashArray: route ? '1 7' : '6 6',
+                }}
               />
             );
           });

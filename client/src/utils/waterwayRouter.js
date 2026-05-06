@@ -45,7 +45,7 @@ class MinHeap {
 }
 
 /* ── haversine distance in metres ─────────────────────────────── */
-function hav(lat1, lng1, lat2, lng2) {
+export function hav(lat1, lng1, lat2, lng2) {
   const R = 6371000;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLng = (lng2 - lng1) * Math.PI / 180;

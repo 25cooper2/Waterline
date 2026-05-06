@@ -16,6 +16,15 @@ const logbookSchema = new mongoose.Schema({
   notes: { type: String, default: null },
   photos: [{ type: String }],
   highlights: { type: String, default: null },
+  // Cached canal-routed path FROM the previous (older) logbook entry TO this one.
+  // Stored once after MapScreen computes via Overpass + Dijkstra so subsequent
+  // map loads don't need to recompute.
+  routeCoords: { type: [[Number]], default: null },          // [[lat,lng], …]
+  routeFromEntry: { type: mongoose.Schema.Types.ObjectId, default: null },
+  routeDistance: { type: Number, default: null },            // miles
+  routeLocks: { type: Number, default: null },
+  routeWaypoint: { type: { lat: Number, lng: Number }, default: null },
+  routeComputedAt: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

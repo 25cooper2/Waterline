@@ -120,7 +120,13 @@ router.put('/:logbookId', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    const { entryDate, startLocation, endLocation, lat, lng, distance, locks, endDate, weather, conditions, fuelUsed, notes, highlights, photos } = req.body;
+    const { entryDate, startLocation, endLocation, lat, lng, distance, locks, endDate, weather, conditions, fuelUsed, notes, highlights, photos, routeCoords, routeFromEntry, routeDistance, routeLocks, routeWaypoint } = req.body;
+    if (routeCoords !== undefined) entry.routeCoords = Array.isArray(routeCoords) ? routeCoords : null;
+    if (routeFromEntry !== undefined) entry.routeFromEntry = routeFromEntry || null;
+    if (routeDistance !== undefined) entry.routeDistance = routeDistance;
+    if (routeLocks !== undefined) entry.routeLocks = routeLocks;
+    if (routeWaypoint !== undefined) entry.routeWaypoint = routeWaypoint || null;
+    if (routeCoords !== undefined) entry.routeComputedAt = new Date();
     if (Array.isArray(photos)) entry.photos = photos;
     if (entryDate !== undefined) entry.entryDate = new Date(entryDate);
     if (startLocation !== undefined) entry.startLocation = startLocation;

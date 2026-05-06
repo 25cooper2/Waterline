@@ -116,7 +116,7 @@ function LocationPicker({ onSelect, onClose, onPickOnMap }) {
       <button onClick={onPickOnMap} style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px',
         borderBottom: '1px solid var(--reed)', background: 'var(--linen)',
-        border: 'none', borderBottom: '1px solid var(--reed)', width: '100%',
+        border: 'none', width: '100%',
         cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 600,
         color: 'var(--moss)',
       }}>
@@ -244,41 +244,60 @@ export default function LogbookScreen() {
       .finally(() => setLoading(false));
   }, [user]);
 
-  /* computed stats */
+  /* computed stats — prefer route-derived miles/locks (canal-accurate) and
+     fall back to the manually-entered values on the entry */
   const stats = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
     let totalNights = 0, totalMiles = 0, yearMiles = 0, yearLocks = 0;
     entries.forEach(e => {
       totalNights += daysBetween(e.entryDate || e.arrived, e.endDate || e.left);
-      const mi = parseFloat(e.distance) || 0;
+      const mi = (e.routeDistance != null) ? e.routeDistance : (parseFloat(e.distance) || 0);
+      const lk = (e.routeLocks != null) ? e.routeLocks : (parseInt(e.locks, 10) || 0);
       totalMiles += mi;
       const ey = new Date(e.entryDate || e.arrived || '').getFullYear();
-      if (ey === year) { yearMiles += mi; yearLocks += parseInt(e.locks, 10) || 0; }
+      if (ey === year) { yearMiles += mi; yearLocks += lk; }
     });
     return { totalNights, totalMiles: Math.round(totalMiles * 10) / 10, yearMiles: Math.round(yearMiles * 10) / 10, yearLocks };
   }, [entries]);
 
   const currentIndex = useMemo(() => entries.findIndex(e => !e.endDate && !e.left), [entries]);
 
-  /* build timeline with gap rows */
+  /* Build timeline items.
+     Entries are newest-first; the "segment" between two adjacent rows in the
+     timeline represents the journey FROM the older entry (entries[i+1]) TO
+     the newer one (entries[i]). The cached canal route lives on the newer
+     entry as `routeFromEntry` + `routeDistance` + `routeLocks`. */
   const timelineItems = useMemo(() => {
     const items = [];
     entries.forEach((entry, i) => {
       items.push({ type: 'entry', entry, i });
-      // Check for gap between this entry's endDate and next entry's entryDate
       if (i < entries.length - 1) {
+        const older = entries[i + 1];
         const thisEnd = entry.endDate || entry.left;
-        const nextStart = entries[i + 1].entryDate || entries[i + 1].arrived;
-        if (thisEnd && nextStart) {
-          const gap = daysBetween(nextStart, thisEnd); // entries sorted newest-first, so thisEnd > nextStart
-          if (gap > 1) {
-            items.push({ type: 'gap', days: gap, afterIndex: i });
-          }
-        } else if (!thisEnd) {
-          // This entry has no end date and there's a next entry — unknown gap
+        const nextStart = older.entryDate || older.arrived;
+        const gap = (thisEnd && nextStart) ? daysBetween(nextStart, thisEnd) : null;
+
+        // Do we have a saved canal route for this segment?
+        const hasRoute =
+          String(entry.routeFromEntry || '') === String(older._id || '') &&
+          (entry.routeDistance != null || entry.routeLocks != null);
+
+        if (hasRoute) {
+          items.push({
+            type: 'segment',
+            miles: entry.routeDistance,
+            locks: entry.routeLocks,
+            days: gap && gap > 1 ? gap : null,
+            afterIndex: i,
+          });
+        } else if (gap == null) {
+          // No end date on the newer entry — unknown gap
           items.push({ type: 'gap', days: null, afterIndex: i });
+        } else if (gap > 1) {
+          items.push({ type: 'gap', days: gap, afterIndex: i });
         }
+        // gap === 0 or 1 with no route data: just collapse, no row
       }
     });
     return items;
@@ -389,12 +408,27 @@ export default function LogbookScreen() {
   /* ── main render ───────────────────────────────────────────── */
   return (
     <div className="screen">
-      <div style={styles.header}>
-        <h1 style={styles.headerTitle}>Logbook</h1>
+      <div style={{ ...styles.header, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1 style={styles.headerTitle}>Logbook</h1>
+          {!loading && entries.length > 0 && (
+            <div style={styles.headerSub}>
+              {stats.totalNights} night{stats.totalNights !== 1 ? 's' : ''} aboard &middot; {stats.totalMiles} mile{stats.totalMiles !== 1 ? 's' : ''} cruised
+            </div>
+          )}
+        </div>
         {!loading && entries.length > 0 && (
-          <div style={styles.headerSub}>
-            {stats.totalNights} night{stats.totalNights !== 1 ? 's' : ''} aboard &middot; {stats.totalMiles} mile{stats.totalMiles !== 1 ? 's' : ''} cruised
-          </div>
+          <button
+            aria-label="View on map"
+            onClick={() => nav('/map', { state: { logbookOnly: true } })}
+            style={{
+              width: 44, height: 44, borderRadius: 12, border: '1px solid var(--reed)',
+              background: 'var(--linen)', cursor: 'pointer', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Icon name="map" size={20} color="var(--moss)" />
+          </button>
         )}
       </div>
 
@@ -443,6 +477,26 @@ export default function LogbookScreen() {
               <div style={styles.timelineLine} />
 
               {timelineItems.map((item, idx) => {
+                if (item.type === 'segment') {
+                  // Canal-routed segment between two entries: show miles + locks
+                  const parts = [];
+                  if (item.miles != null) parts.push(`${item.miles} mi`);
+                  if (item.locks != null && item.locks > 0) parts.push(`${item.locks} lock${item.locks !== 1 ? 's' : ''}`);
+                  if (item.days) parts.push(`${item.days} day${item.days !== 1 ? 's' : ''}`);
+                  return (
+                    <div key={`seg-${idx}`} style={styles.gapRow}>
+                      <div style={styles.dotCol}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--pebble)', marginTop: 3 }} />
+                      </div>
+                      <div style={styles.gapBody}>
+                        <Icon name="boat" size={13} color="var(--silt)" />
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--silt)' }}>
+                          {parts.join(' · ') || 'Travelled'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
                 if (item.type === 'gap') {
                   return (
                     <div key={`gap-${idx}`} style={styles.gapRow} onClick={() => openNewForGap(item.afterIndex)}>
