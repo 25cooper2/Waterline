@@ -44,6 +44,7 @@ export const api = {
   createProduct: (body) => req('/api/products', { method: 'POST', body: JSON.stringify(body) }),
   updateProduct: (id, body) => req(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteProduct: (id) => req(`/api/products/${id}`, { method: 'DELETE' }),
+  removeProduct: (id, reason) => req(`/api/products/${id}/remove`, { method: 'POST', body: JSON.stringify({ reason }) }),
   favoriteProduct: (id) => req(`/api/products/${id}/favorite`, { method: 'POST' }),
   unfavoriteProduct: (id) => req(`/api/products/${id}/favorite`, { method: 'DELETE' }),
 

@@ -60,6 +60,9 @@ export default function CreateListingScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [photos, setPhotos] = useState([]); // base64 data URLs
+  const [listingCreatedAt, setListingCreatedAt] = useState(null);
+  const [showRemoveModal, setShowRemoveModal] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const fileInputRef = useRef(null);
 
   // Location state
@@ -96,6 +99,7 @@ export default function CreateListingScreen() {
         description: p.description || '',
       });
       setPhotos(p.images || []);
+      setListingCreatedAt(p.createdAt || null);
       if (p.lat && p.lng) {
         setPickedLat(p.lat);
         setPickedLng(p.lng);
@@ -136,6 +140,22 @@ export default function CreateListingScreen() {
 
   const canSubmit = form.title.trim() && form.description.trim() && form.price !== '';
 
+  const daysLive = listingCreatedAt
+    ? Math.max(0, Math.round((Date.now() - new Date(listingCreatedAt).getTime()) / 86400000))
+    : null;
+
+  const removeListing = async (reason) => {
+    setRemoving(true);
+    try {
+      await api.removeProduct(editId, reason);
+      nav('/market');
+    } catch (e) {
+      setError(e.message);
+      setRemoving(false);
+      setShowRemoveModal(false);
+    }
+  };
+
   const submit = async () => {
     if (!canSubmit || submitting) return;
     setSubmitting(true);
@@ -171,7 +191,7 @@ export default function CreateListingScreen() {
         <div style={{ width: 24 }} />
       </div>
 
-      <div className="scroll" style={{ padding: '20px 20px 120px' }}>
+      <div className="scroll" style={{ padding: editId ? '20px 20px 40px' : '20px 20px 120px' }}>
         {/* What are you adding? */}
         <div style={{ marginBottom: 20 }}>
           <div className="label">What are you adding?</div>
@@ -364,21 +384,111 @@ export default function CreateListingScreen() {
         </div>
 
         {error && <div className="error-msg" style={{ marginBottom: 16 }}>{error}</div>}
+
+        {/* Edit mode: inline actions */}
+        {editId && (
+          <div style={{ marginTop: 8 }}>
+            {/* Days live badge */}
+            {daysLive !== null && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20,
+                padding: '10px 14px', background: 'var(--linen)', borderRadius: 'var(--r-md)',
+                border: '1px solid var(--reed)',
+              }}>
+                <Icon name="logbook" size={16} color="var(--pebble)" />
+                <span style={{ fontSize: 13, color: 'var(--silt)', fontWeight: 500 }}>
+                  Listing live for <strong style={{ color: 'var(--ink)' }}>{daysLive} day{daysLive !== 1 ? 's' : ''}</strong>
+                </span>
+              </div>
+            )}
+
+            {/* Save / Cancel */}
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+              <button className="btn ghost" style={{ flex: 1 }} onClick={() => nav(-1)}>Cancel</button>
+              <button className="btn primary" style={{ flex: 1 }} disabled={!canSubmit || submitting} onClick={submit}>
+                {submitting ? 'Saving...' : 'Save changes'}
+              </button>
+            </div>
+
+            {/* Remove listing */}
+            <button
+              onClick={() => setShowRemoveModal(true)}
+              style={{
+                width: '100%', padding: '14px', borderRadius: 'var(--r-md)',
+                border: '1px solid var(--rust)', background: 'transparent',
+                color: 'var(--rust)', fontWeight: 600, fontSize: 14,
+                fontFamily: 'var(--font-sans)', cursor: 'pointer',
+                marginBottom: 'calc(16px + env(safe-area-inset-bottom))',
+              }}
+            >
+              Remove listing
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Bottom bar */}
-      <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))',
-        background: 'var(--paper)', borderTop: '1px solid var(--reed)',
-        display: 'flex', gap: 12,
-      }}>
-        {!editId && <button className="btn ghost" style={{ flex: 1 }} onClick={() => nav('/market')}>Cancel</button>}
-        {editId && <button className="btn ghost" style={{ flex: 1 }} onClick={() => nav(-1)}>Cancel</button>}
-        <button className="btn primary" style={{ flex: 1 }} disabled={!canSubmit || submitting} onClick={submit}>
-          {submitting ? (editId ? 'Saving...' : 'Publishing...') : (editId ? 'Save changes' : 'Publish listing')}
-        </button>
-      </div>
+      {/* Create mode: fixed bottom bar */}
+      {!editId && (
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))',
+          background: 'var(--paper)', borderTop: '1px solid var(--reed)',
+          display: 'flex', gap: 12,
+        }}>
+          <button className="btn ghost" style={{ flex: 1 }} onClick={() => nav('/market')}>Cancel</button>
+          <button className="btn primary" style={{ flex: 1 }} disabled={!canSubmit || submitting} onClick={submit}>
+            {submitting ? 'Publishing...' : 'Publish listing'}
+          </button>
+        </div>
+      )}
+
+      {/* Remove listing modal */}
+      {showRemoveModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 3000,
+          background: 'rgba(31,42,38,0.6)',
+          display: 'flex', alignItems: 'flex-end',
+        }} onClick={() => setShowRemoveModal(false)}>
+          <div style={{
+            width: '100%', background: 'var(--paper)',
+            borderRadius: 'var(--r-xl) var(--r-xl) 0 0',
+            padding: '24px 20px', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--reed)', margin: '0 auto 20px' }} />
+            <h3 style={{ margin: '0 0 6px', fontSize: 19, fontWeight: 700 }}>Remove listing</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 14, color: 'var(--silt)' }}>
+              Why are you removing this listing?
+            </p>
+            {[
+              { key: 'sold_waterline', label: 'Sold via Waterline', sub: 'The buyer found me through the app' },
+              { key: 'sold_elsewhere', label: 'Sold elsewhere', sub: 'Sold through another channel' },
+              { key: 'no_longer_needed', label: 'No longer needed', sub: 'Keeping it, or no longer selling' },
+            ].map(opt => (
+              <button
+                key={opt.key}
+                disabled={removing}
+                onClick={() => removeListing(opt.key)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+                  padding: '14px 16px', marginBottom: 10,
+                  borderRadius: 'var(--r-md)', border: '1px solid var(--reed)',
+                  background: 'var(--paper-2)', cursor: removing ? 'wait' : 'pointer',
+                  textAlign: 'left', fontFamily: 'var(--font-sans)',
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--ink)' }}>{opt.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--silt)', marginTop: 2 }}>{opt.sub}</div>
+                </div>
+                <Icon name="chevron" size={18} color="var(--pebble)" />
+              </button>
+            ))}
+            <button className="btn ghost block" style={{ marginTop: 4 }} onClick={() => setShowRemoveModal(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

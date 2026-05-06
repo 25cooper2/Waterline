@@ -1,6 +1,7 @@
 import express from 'express';
 import Product from '../models/Product.js';
 import User from '../models/User.js';
+import ListingAnalytics from '../models/ListingAnalytics.js';
 import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -132,6 +133,44 @@ router.delete('/:productId', authMiddleware, async (req, res) => {
 
     await Product.findByIdAndDelete(req.params.productId);
     res.json({ message: 'Product deleted' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Remove listing with analytics (sold/elsewhere/no longer needed)
+router.post('/:productId/remove', authMiddleware, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.productId);
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    if (product.sellerId.toString() !== req.user.userId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    const { reason } = req.body;
+    const validReasons = ['sold_waterline', 'sold_elsewhere', 'no_longer_needed'];
+    if (!validReasons.includes(reason)) {
+      return res.status(400).json({ error: 'Invalid reason' });
+    }
+
+    const daysLive = product.createdAt
+      ? Math.round((Date.now() - new Date(product.createdAt).getTime()) / 86400000)
+      : null;
+
+    await ListingAnalytics.create({
+      productId: product._id,
+      sellerId: product.sellerId,
+      listingType: product.listingType,
+      category: product.category,
+      price: product.price,
+      title: product.title,
+      daysLive,
+      removalReason: reason,
+      createdAt: product.createdAt,
+    });
+
+    await Product.findByIdAndDelete(req.params.productId);
+    res.json({ message: 'Listing removed', daysLive, reason });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
