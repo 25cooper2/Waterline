@@ -10,8 +10,15 @@ async function req(path, opts = {}) {
     },
     ...opts,
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Something went wrong');
+  // Read as text first so non-JSON responses (HTML error pages, 413, etc.) give clear errors
+  const text = await res.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; }
+  catch {
+    if (res.status === 413) throw new Error('Upload too large — try a smaller image.');
+    throw new Error(`Server error (${res.status}). Please try again.`);
+  }
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
 
