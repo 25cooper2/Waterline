@@ -84,30 +84,44 @@ export default function InboxScreen() {
   };
 
   /* ---- load feed ---- */
-  const getLiveLocation = () => new Promise((resolve) => {
-    const fallback = getCachedLocation()
-      || (user?.mooringLat ? { lat: user.mooringLat, lng: user.mooringLng } : null);
-    if (!navigator.geolocation) return resolve(fallback);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        saveDeviceLocation(pos.coords.latitude, pos.coords.longitude);
-        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      },
-      () => resolve(fallback),
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
-    );
-  });
+  const getBestLocation = () =>
+    getCachedLocation() || (user?.mooringLat ? { lat: user.mooringLat, lng: user.mooringLng } : null);
+
+  const fetchHazards = async (loc) => {
+    if (!loc) return;
+    const dLat = radiusMi / 69;
+    const dLng = radiusMi / (69 * Math.cos(loc.lat * Math.PI / 180));
+    try {
+      const hz = await api.listHazards({
+        minLat: loc.lat - dLat, maxLat: loc.lat + dLat,
+        minLng: loc.lng - dLng, maxLng: loc.lng + dLng,
+      });
+      setHazardsNearby(hz || []);
+    } catch { /* keep existing */ }
+  };
 
   const loadFeed = async () => {
     setLoading(true);
     const params = {};
     let nearLoc = null;
     if (scope === 'nearby') {
-      nearLoc = await getLiveLocation();
+      // Use cached/mooring immediately — GPS update fires in background
+      nearLoc = getBestLocation();
       if (nearLoc) {
         params.lat = nearLoc.lat;
         params.lng = nearLoc.lng;
         params.radius = radiusMi;
+      }
+      // Ask GPS in background; if it returns a better location, refresh hazards
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            saveDeviceLocation(pos.coords.latitude, pos.coords.longitude);
+            fetchHazards({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+        );
       }
     } else if (scope === 'following') {
       if (!user) { setLoading(false); setPosts([]); setHazardsNearby([]); return; }
@@ -120,17 +134,8 @@ export default function InboxScreen() {
       setPosts(result || []);
     } catch { setPosts([]); }
 
-    // Pull hazards within the same nearby radius and merge into the feed
-    if (scope === 'nearby' && nearLoc && !activeTag && !feedQuery.trim()) {
-      const dLat = radiusMi / 69;
-      const dLng = radiusMi / (69 * Math.cos(nearLoc.lat * Math.PI / 180));
-      try {
-        const hz = await api.listHazards({
-          minLat: nearLoc.lat - dLat, maxLat: nearLoc.lat + dLat,
-          minLng: nearLoc.lng - dLng, maxLng: nearLoc.lng + dLng,
-        });
-        setHazardsNearby(hz || []);
-      } catch { setHazardsNearby([]); }
+    if (scope === 'nearby' && !activeTag && !feedQuery.trim()) {
+      await fetchHazards(nearLoc);
     } else {
       setHazardsNearby([]);
     }
@@ -142,6 +147,16 @@ export default function InboxScreen() {
     searchTimeout.current = setTimeout(loadFeed, feedQuery ? 300 : 0);
     return () => clearTimeout(searchTimeout.current);
   }, [scope, radiusMi, activeTag, feedQuery, user]);
+
+  // Auto-refresh hazards every 60 s so new ones appear in the timeline
+  useEffect(() => {
+    if (scope !== 'nearby') return;
+    const id = setInterval(() => {
+      const loc = getBestLocation();
+      if (loc) fetchHazards(loc);
+    }, 60000);
+    return () => clearInterval(id);
+  }, [scope, radiusMi, user]);
 
   useEffect(() => {
     api.trendingTags().then(setTrendingTags).catch(() => {});
@@ -611,7 +626,7 @@ const menuItemStyle = {
   cursor: 'pointer', fontFamily: 'var(--font-sans)', color: 'var(--ink)',
 };
 
-function PostCard({ post, onTagClick, onAuthorClick, onOpen }) {
+function PostCard({ post, onTagClick, onAuthorClick, onOpen, onLike }) {
   const a = post.authorId || {};
   const handle = a.username ? `@${a.username}` : (a.displayName || 'Boater');
   const plate = a.boatIndexNumber;
