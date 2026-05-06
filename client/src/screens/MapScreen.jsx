@@ -90,6 +90,18 @@ function makeAvatarPinIcon({ photoUrl, name = '?', color = '#1A6B5A' }) {
   });
 }
 
+function makeLogbookPinIcon() {
+  // White centre, black outline — inverted from lock pins
+  // Using Marker+DivIcon so it renders in the marker pane (z-index 600),
+  // which is above the overlay pane where waterway Polylines live (z-index 400).
+  return L.divIcon({
+    html: `<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:2.5px solid #111;box-shadow:0 1px 4px rgba(0,0,0,0.55)"></div>`,
+    className: 'logbook-marker',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
+}
+
 function makeLockIcon(label, showLabel) {
   const safe = label.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
   const labelHtml = showLabel ? `<div style="position:absolute;left:12px;top:-9px;background:rgba(255,255,255,0.95);border:1px solid #333;border-radius:3px;padding:2px 6px;font-size:11px;font-weight:700;color:#111;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);font-family:var(--font-sans, sans-serif)">${safe}</div>` : '';
@@ -608,12 +620,20 @@ out center geom qt;`;
             eventHandlers={{ click: () => setSelectedPin({ kind: 'hazard', ...h }) }} />
         ))}
 
-        {/* Logbook pins (past moorings) — only when filter is on */}
+        {/* Logbook journey line — oldest to newest, drawn before pins so pins sit on top */}
+        {filters.logbook && (() => {
+          const sorted = [...logbookEntries].sort((a, b) => new Date(a.entryDate || a.arrived) - new Date(b.entryDate || b.arrived));
+          const coords = sorted.map(e => [e.lat, e.lng]);
+          return coords.length > 1 ? (
+            <Polyline positions={coords} pathOptions={{ color: '#111', weight: 2.5, opacity: 0.7, dashArray: '6 5' }} />
+          ) : null;
+        })()}
+
+        {/* Logbook pins (past moorings) — Marker+DivIcon so they render in markerPane above waterway lines */}
         {filters.logbook && logbookEntries
           .filter(e => e._id !== currentMooring?._id)
           .map(e => (
-            <CircleMarker key={e._id} center={[e.lat, e.lng]} radius={7}
-              pathOptions={{ color: '#1A6B5A', fillColor: '#1A6B5A', fillOpacity: 0.7, weight: 2 }}
+            <Marker key={e._id} position={[e.lat, e.lng]} icon={makeLogbookPinIcon()}
               eventHandlers={{ click: () => setSelectedPin({ kind: 'logbook', ...e }) }} />
           ))}
 
