@@ -298,72 +298,93 @@ export default function MapScreen() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Fetch canal features whenever visible bounds change (bboxKey is "s,w,n,e" string)
+  // Fetch canal features whenever visible bounds change.
+  // Uses tile-snapped bbox + localStorage cache so panning within an area is instant.
   useEffect(() => {
     if (!bboxKey) return;
+    const [s, w, n, e] = bboxKey.split(',').map(Number);
+
+    // Snap viewport to a fixed grid. 0.1° ≈ 7km; bigger than typical viewport
+    // at zoom 12, so even pans within a town stay in the same fetch tile.
+    const GRID = 0.1;
+    const snap = (v, dir) => dir === 'down' ? Math.floor(v / GRID) * GRID : Math.ceil(v / GRID) * GRID;
+    const ts = snap(s, 'down'), tw = snap(w, 'down');
+    const tn = snap(n, 'up'),   te = snap(e, 'up');
+    const includeFeatures = mapZoom >= 12;
+    const cacheKey = `wl_canal_v3_${ts.toFixed(2)}_${tw.toFixed(2)}_${tn.toFixed(2)}_${te.toFixed(2)}_${includeFeatures ? 'f' : 'w'}`;
+
+    // 1) Try cache first — render immediately if available (no fetch)
+    const TTL = 7 * 24 * 60 * 60 * 1000; // 7 days — canals rarely change
+    let renderedFromCache = false;
+    try {
+      const raw = localStorage.getItem(cacheKey);
+      if (raw) {
+        const obj = JSON.parse(raw);
+        if (obj?.t && Date.now() - obj.t < TTL && obj.lines && obj.pts) {
+          setWaterwayLines(obj.lines);
+          setCanalFeatures(obj.pts);
+          renderedFromCache = true;
+          return; // cache hit — skip network entirely
+        }
+      }
+    } catch {}
+
+    // 2) Cache miss — fetch (debounced)
     clearTimeout(overpassTimeout.current);
     overpassTimeout.current = setTimeout(async () => {
       try {
-        const bbox = bboxKey; // already "s,w,n,e"
-
-        // Always fetch navigable waterways (canals + rivers with boat/motorboat=yes).
-        // Features only when zoomed in enough (town scale, zoom >= 12) to keep things fast.
-        const includeFeatures = mapZoom >= 12;
+        const bbox = `${ts},${tw},${tn},${te}`;
         const featureBlock = includeFeatures ? `
   node["amenity"~"^(toilets|water_point|waste_disposal|recycling|fuel)$"](${bbox});
   node["leisure"="marina"](${bbox});
   node["waterway"~"^(weir|dam|sluice_gate|turning_point)$"](${bbox});
   node["mooring"]["mooring"!="no"](${bbox});` : '';
 
-        const oq = `[out:json][timeout:15];
+        const oq = `[out:json][timeout:8];
 (
   way["waterway"="canal"](${bbox});
   way["waterway"="river"]["boat"~"yes|designated|permissive"](${bbox});
-  way["waterway"="river"]["motorboat"~"yes|designated|permissive"](${bbox});
-  way["waterway"="canal"]["lock"="yes"](${bbox});${featureBlock}
+  way["waterway"="river"]["motorboat"~"yes|designated|permissive"](${bbox});${featureBlock}
 );
-out center geom;`;
+out center geom qt;`;
 
-        // Try primary, fall back to mirror
+        // kumi.systems is consistently faster than the official endpoint
         const OVERPASS_ENDPOINTS = [
-          'https://overpass-api.de/api/interpreter',
           'https://overpass.kumi.systems/api/interpreter',
+          'https://overpass-api.de/api/interpreter',
           'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
         ];
         let data = null;
         for (const url of OVERPASS_ENDPOINTS) {
           try {
-            const r = await fetch(url, { method: 'POST', body: oq });
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 9000);
+            const r = await fetch(url, { method: 'POST', body: oq, signal: ctrl.signal });
+            clearTimeout(tid);
             if (r.ok) { data = await r.json(); break; }
           } catch { /* try next */ }
         }
         if (!data) { console.warn('All Overpass endpoints failed'); return; }
-        const lines = [], pts = [];
 
+        const lines = [], pts = [];
         for (const el of data.elements || []) {
           const tags = el.tags || {};
           const ww = tags.waterway;
-          // Canal/river lines — INCLUDING lock=yes ways so the waterway is continuous
           if (el.type === 'way' && (ww === 'canal' || ww === 'river') && el.geometry?.length) {
             lines.push({ id: el.id, coords: el.geometry.map(p => [p.lat, p.lon]), name: tags.name || ww });
-            // Don't continue — lock=yes ways also need to be added as a point feature below
             if (tags.lock !== 'yes') continue;
           }
           const ftype = getFeatureType(tags);
           if (!ftype) continue;
           let lat = el.lat ?? el.center?.lat;
           let lon = el.lon ?? el.center?.lon;
-          // Fallback: midpoint of way geometry if no center provided
           if ((lat == null || lon == null) && el.geometry?.length) {
             const mid = el.geometry[Math.floor(el.geometry.length / 2)];
-            lat = mid.lat;
-            lon = mid.lon;
+            lat = mid.lat; lon = mid.lon;
           }
           if (lat == null || lon == null) continue;
-          // Build display label — for locks include ref and name
           let label = tags.name || FEATURE_META[ftype]?.label || ftype;
           if (ftype === 'lock') {
-            // UK canals use lock_name and lock_ref (underscores)
             const ref = tags.lock_ref || tags['lock:ref'] || tags.ref;
             const name = tags.lock_name || tags['lock:name'] || tags.name;
             if (ref && name) label = `Lock ${ref}: ${name}`;
@@ -376,12 +397,25 @@ out center geom;`;
 
         setWaterwayLines(lines);
         setCanalFeatures(pts);
-        const lockCount = pts.filter(p => p.ftype === 'lock').length;
-        console.log(`[canal] ${lines.length} waterways, ${pts.length} features (${lockCount} locks)`);
+
+        // Cache for future visits — try, evict old keys on quota error
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), lines, pts }));
+        } catch {
+          // Quota exceeded: clear oldest canal cache entries
+          const keys = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('wl_canal_v3_')) keys.push(k);
+          }
+          // Remove half of them to make room
+          keys.slice(0, Math.ceil(keys.length / 2)).forEach(k => localStorage.removeItem(k));
+          try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), lines, pts })); } catch {}
+        }
       } catch (err) {
         console.warn('Overpass fetch failed:', err);
       }
-    }, 600);
+    }, renderedFromCache ? 1500 : 400);
   }, [bboxKey, mapZoom]);
 
   // Geocode search via Nominatim (debounced)
