@@ -13,6 +13,11 @@ const boatSchema = new mongoose.Schema({
   lastKnownLng: { type: Number, default: null },
   lastLocationUpdate: { type: Date, default: null },
   crtUploadedAt: { type: Date, default: null },
+  licenseDocUrl: { type: String, default: null },
+  boatPhotoUrl: { type: String, default: null },
+  boatLength: { type: Number, default: null },
+  boatYear: { type: Number, default: null },
+  boatType: { type: String, default: null },
   lastVerifiedAt: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

@@ -123,7 +123,7 @@ const REASON_LABELS = {
   no_longer_needed: 'No longer needed',
 };
 
-const TABS = ['Overview', 'Users', 'Listings', 'Removals'];
+const TABS = ['Overview', 'Approvals', 'Users', 'Listings', 'Removals'];
 
 /* ── main component ────────────────────────────────────────────── */
 
@@ -163,6 +163,8 @@ export default function AdminScreen() {
   const [users, setUsers] = useState([]);
   const [listings, setListings] = useState([]);
   const [removals, setRemovals] = useState([]);
+  const [pending, setPending] = useState([]);
+  const [actioning, setActioning] = useState(null);
   const [loading, setLoading] = useState(true);
   const [promoteEmail, setPromoteEmail] = useState('');
   const [promoteMsg, setPromoteMsg] = useState('');
@@ -175,10 +177,30 @@ export default function AdminScreen() {
       api.adminUsers(),
       api.adminListings(),
       api.adminRemovals(),
-    ]).then(([s, u, l, r]) => {
-      setStats(s); setUsers(u); setListings(l); setRemovals(r);
+      api.adminPendingCerts().catch(() => []),
+    ]).then(([s, u, l, r, p]) => {
+      setStats(s); setUsers(u); setListings(l); setRemovals(r); setPending(p);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [user]);
+
+  const approveCert = async (boatId) => {
+    setActioning(boatId);
+    try {
+      await api.adminApproveCert(boatId);
+      setPending(p => p.filter(b => b._id !== boatId));
+    } catch (e) { alert('Approve failed: ' + e.message); }
+    setActioning(null);
+  };
+  const rejectCert = async (boatId) => {
+    const reason = prompt('Reason for rejection?');
+    if (!reason) return;
+    setActioning(boatId);
+    try {
+      await api.adminRejectCert(boatId, reason);
+      setPending(p => p.filter(b => b._id !== boatId));
+    } catch (e) { alert('Reject failed: ' + e.message); }
+    setActioning(null);
+  };
 
   const promote = async () => {
     try {
@@ -417,6 +439,62 @@ export default function AdminScreen() {
                   </div>
                 </Section>
               </>
+            )}
+
+            {/* ── APPROVALS ── */}
+            {tab === 'Approvals' && (
+              <Section title={`Boat verifications · ${pending.length} pending`}>
+                {pending.length === 0 ? (
+                  <div style={{ background: 'var(--paper)', border: '1px solid var(--reed)', borderRadius: 'var(--r-lg)', padding: 32, textAlign: 'center', color: 'var(--silt)' }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>✓</div>
+                    Nothing to review. All caught up.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {pending.map(b => (
+                      <div key={b._id} style={{ background: 'var(--paper)', border: '1px solid var(--reed)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+                        {b.licenseDocUrl && (
+                          <div style={{ background: 'var(--linen)', padding: 8, borderBottom: '1px solid var(--reed)' }}>
+                            <a href={b.licenseDocUrl} target="_blank" rel="noopener noreferrer">
+                              <img src={b.licenseDocUrl} alt="Licence" style={{ width: '100%', maxHeight: 240, objectFit: 'contain', display: 'block', borderRadius: 6 }} />
+                            </a>
+                          </div>
+                        )}
+                        <div style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 16, fontWeight: 700 }}>{b.boatName}</div>
+                              <div style={{ fontSize: 12, color: 'var(--silt)' }}>
+                                Index: <strong style={{ fontFamily: 'var(--font-mono, monospace)' }}>{b.boatIndexNumber}</strong>
+                                {b.boatType && ` · ${b.boatType}`}
+                              </div>
+                            </div>
+                            <span style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, background: 'var(--rust-soft, #FCEEEA)', color: 'var(--rust)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Pending</span>
+                          </div>
+                          <div style={{ fontSize: 13, color: 'var(--silt)', marginBottom: 10 }}>
+                            Owner: <strong style={{ color: 'var(--ink)' }}>{b.ownerId?.displayName || b.ownerId?.username}</strong>
+                            {b.ownerId?.email && <> · {b.ownerId.email}</>}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--pebble)', marginBottom: 12 }}>
+                            Submitted {fmtDate(b.crtUploadedAt)}
+                            {!b.licenseDocUrl && ' · No document attached'}
+                          </div>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button onClick={() => rejectCert(b._id)} disabled={actioning === b._id}
+                              style={{ flex: 1, padding: '10px 14px', borderRadius: 'var(--r-md)', border: '1px solid var(--reed)', background: 'var(--paper)', color: 'var(--ink)', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+                              Reject
+                            </button>
+                            <button onClick={() => approveCert(b._id)} disabled={actioning === b._id}
+                              style={{ flex: 1, padding: '10px 14px', borderRadius: 'var(--r-md)', border: 'none', background: 'var(--moss)', color: 'var(--paper)', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+                              {actioning === b._id ? '…' : 'Approve'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Section>
             )}
 
             {/* ── USERS ── */}
