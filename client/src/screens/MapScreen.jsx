@@ -917,34 +917,30 @@ out center geom qt;`;
         </div>
       )}
 
-      {/* Edit route button — centered between canal features & compass, same row */}
-      {!locationPickMode && filters.logbook && (
-        <button
-          onClick={() => setEditJourney(v => !v)}
-          style={{
-            position: 'absolute', left: '50%', transform: 'translateX(-50%)',
-            top: 120, zIndex: 1000,
-            background: editJourney ? '#111' : '#333',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 22,
-            padding: '10px 16px',
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 8,
-            boxShadow: 'var(--sh-1)',
-          }}
-        >
-          <Icon name={editJourney ? 'check' : 'edit'} size={16} color="#fff" />
-          {editJourney ? 'Done' : 'Edit route'}
-        </button>
-      )}
-
-      {/* Controls (right side) */}
+      {/* Controls (right side) — compass + edit route in a row */}
       {!locationPickMode && (
-        <div style={{ position: 'absolute', right: 12, top: 120, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ position: 'absolute', right: 12, top: 120, zIndex: 1000, display: 'flex', gap: 6 }}>
           <CtrlBtn onClick={goToMyLocation}><Icon name="compass" size={20} color="var(--moss)" stroke={1.8} /></CtrlBtn>
+          {filters.logbook && (
+            <button
+              onClick={() => setEditJourney(v => !v)}
+              style={{
+                width: 44, height: 44, borderRadius: 10,
+                border: '1px solid var(--reed)',
+                background: editJourney ? 'var(--moss-soft)' : 'var(--paper)',
+                boxShadow: 'var(--sh-1)',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              title={editJourney ? 'Done editing route' : 'Edit route'}
+            >
+              <Icon
+                name={editJourney ? 'check' : 'edit'}
+                size={20}
+                color={editJourney ? 'var(--moss)' : 'var(--silt)'}
+              />
+            </button>
+          )}
         </div>
       )}
 
