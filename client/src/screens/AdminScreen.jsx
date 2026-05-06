@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
@@ -129,8 +128,36 @@ const TABS = ['Overview', 'Users', 'Listings', 'Removals'];
 /* ── main component ────────────────────────────────────────────── */
 
 export default function AdminScreen() {
-  const { user } = useAuth();
-  const nav = useNavigate();
+  const { user, logout } = useAuth();
+
+  // ── inline login state (used when not yet authenticated) ──
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    setLoginLoading(true);
+    try {
+      const data = await api.login(loginForm);
+      localStorage.setItem('wl_token', data.token);
+      // Reload so AuthContext picks up the new token
+      window.location.reload();
+    } catch (err) {
+      setLoginError(err.message || 'Invalid email or password');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    // Stay on /admin — the login wall below will render
+    window.location.reload();
+  };
+
+  // ── data ──
   const [tab, setTab] = useState('Overview');
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
@@ -139,11 +166,6 @@ export default function AdminScreen() {
   const [loading, setLoading] = useState(true);
   const [promoteEmail, setPromoteEmail] = useState('');
   const [promoteMsg, setPromoteMsg] = useState('');
-
-  useEffect(() => {
-    if (!user) { nav('/auth'); return; }
-    if (user.role !== 'admin') { nav('/map'); return; }
-  }, [user]);
 
   useEffect(() => {
     if (!user || user.role !== 'admin') return;
@@ -166,7 +188,61 @@ export default function AdminScreen() {
     } catch (e) { setPromoteMsg('Error: ' + e.message); }
   };
 
-  if (!user || user.role !== 'admin') return null;
+  // ── not logged in → inline login wall ──
+  if (!user) {
+    return (
+      <div style={{ minHeight: '100dvh', background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ width: '100%', maxWidth: 380 }}>
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <div style={{ fontSize: 32, fontWeight: 700, color: 'var(--paper)', letterSpacing: '-0.02em', fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>Waterline</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>Admin dashboard · restricted access</div>
+          </div>
+          <form onSubmit={handleLogin}>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Email</label>
+              <input type="email" required autoFocus value={loginForm.email}
+                onChange={e => setLoginForm(f => ({ ...f, email: e.target.value }))}
+                style={{ width: '100%', padding: '12px 14px', borderRadius: 'var(--r-md)', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.07)', color: 'var(--paper)', fontSize: 15, fontFamily: 'var(--font-sans)', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Password</label>
+              <input type="password" required value={loginForm.password}
+                onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
+                style={{ width: '100%', padding: '12px 14px', borderRadius: 'var(--r-md)', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.07)', color: 'var(--paper)', fontSize: 15, fontFamily: 'var(--font-sans)', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            {loginError && (
+              <div style={{ marginBottom: 16, padding: '10px 14px', background: 'rgba(192,57,43,0.2)', border: '1px solid rgba(192,57,43,0.5)', borderRadius: 'var(--r-md)', fontSize: 13, color: '#f1a49a' }}>
+                {loginError}
+              </div>
+            )}
+            <button type="submit" disabled={loginLoading}
+              style={{ width: '100%', padding: 14, borderRadius: 'var(--r-md)', border: 'none', background: 'var(--moss)', color: 'var(--paper)', fontWeight: 700, fontSize: 15, fontFamily: 'var(--font-sans)', cursor: loginLoading ? 'wait' : 'pointer' }}>
+              {loginLoading ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ── logged in but not admin ──
+  if (user.role !== 'admin') {
+    return (
+      <div style={{ minHeight: '100dvh', background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ textAlign: 'center', maxWidth: 340 }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--paper)', marginBottom: 8 }}>Access denied</div>
+          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)', lineHeight: 1.6, marginBottom: 24 }}>
+            {user.email} doesn't have admin access. Contact the site owner to be added.
+          </div>
+          <button onClick={handleLogout}
+            style={{ padding: '10px 24px', borderRadius: 'var(--r-md)', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-sans)', fontSize: 14, cursor: 'pointer' }}>
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   /* ── column definitions ── */
   const userCols = [
@@ -245,13 +321,14 @@ export default function AdminScreen() {
         padding: '20px 20px 0', position: 'sticky', top: 0, zIndex: 100,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <button onClick={() => nav('/map')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
-            <Icon name="back" size={22} color="var(--paper)" />
-          </button>
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Admin Dashboard</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>Waterline internal · {user?.email}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>Signed in as {user.email}</div>
           </div>
+          <button onClick={handleLogout}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 'var(--r-md)', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: 'rgba(255,255,255,0.75)', fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <Icon name="logout" size={14} color="rgba(255,255,255,0.75)" /> Sign out
+          </button>
         </div>
         <div style={{ display: 'flex', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
           {TABS.map(t => (
