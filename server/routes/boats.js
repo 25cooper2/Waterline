@@ -65,10 +65,14 @@ router.put('/:boatId', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    const { boatName, ownerContactEmail, ownerPhone } = req.body;
-    if (boatName) boat.boatName = boatName;
-    if (ownerContactEmail) boat.ownerContactEmail = ownerContactEmail;
-    if (ownerPhone) boat.ownerPhone = ownerPhone;
+    const { boatName, ownerContactEmail, ownerPhone, boatType, boatLength, boatYear, boatPhotoUrl } = req.body;
+    if (boatName !== undefined) boat.boatName = boatName;
+    if (ownerContactEmail !== undefined) boat.ownerContactEmail = ownerContactEmail;
+    if (ownerPhone !== undefined) boat.ownerPhone = ownerPhone;
+    if (boatType !== undefined) boat.boatType = boatType;
+    if (boatLength !== undefined) boat.boatLength = boatLength;
+    if (boatYear !== undefined) boat.boatYear = boatYear;
+    if (boatPhotoUrl !== undefined) boat.boatPhotoUrl = boatPhotoUrl;
     boat.updatedAt = new Date();
 
     await boat.save();
@@ -110,6 +114,7 @@ router.post('/:boatId/update-location', authMiddleware, async (req, res) => {
 // Upload certificate (marks boat as pending_approval)
 router.post('/:boatId/upload-certificate', authMiddleware, async (req, res) => {
   try {
+    const { licenseDocUrl } = req.body || {};
     const boat = await Boat.findById(req.params.boatId);
     if (!boat) {
       return res.status(404).json({ error: 'Boat not found' });
@@ -119,21 +124,40 @@ router.post('/:boatId/upload-certificate', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    // For MVP: just mark as pending approval. Admin will review manually.
+    if (licenseDocUrl) boat.licenseDocUrl = licenseDocUrl;
     boat.verificationStatus = 'pending_approval';
     boat.crtUploadedAt = new Date();
-
     await boat.save();
 
-    // Mark user as verified in their profile
+    // User is NOT marked verified until admin approves.
+    res.json({ message: 'Certificate submitted for review', boat });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete boat (owner only)
+router.delete('/:boatId', authMiddleware, async (req, res) => {
+  try {
+    const boat = await Boat.findById(req.params.boatId);
+    if (!boat) return res.status(404).json({ error: 'Boat not found' });
+    if (boat.ownerId.toString() !== req.user.userId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    await Boat.deleteOne({ _id: boat._id });
     const user = await User.findById(req.user.userId);
     if (user) {
-      user.isVerified = true;
-      user.verificationStatus = 'verified';
+      // If user's primary boat was this one, clear flags
+      if (String(user.boatId) === String(boat._id)) {
+        user.boatId = null;
+        user.boatIndexNumber = null;
+        user.boatName = null;
+      }
+      user.isVerified = false;
+      user.verificationStatus = 'unverified';
       await user.save();
     }
-
-    res.json({ message: 'Certificate submitted for review', boat });
+    res.json({ message: 'Boat deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

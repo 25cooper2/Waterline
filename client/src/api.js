@@ -35,7 +35,8 @@ export const api = {
   createBoat: (body) => req('/api/boats', { method: 'POST', body: JSON.stringify(body) }),
   getBoat: (id) => req(`/api/boats/${id}`),
   updateBoat: (id, body) => req(`/api/boats/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  uploadCertificate: (id) => req(`/api/boats/${id}/upload-certificate`, { method: 'POST' }),
+  uploadCertificate: (id, body = {}) => req(`/api/boats/${id}/upload-certificate`, { method: 'POST', body: JSON.stringify(body) }),
+  deleteBoat: (id) => req(`/api/boats/${id}`, { method: 'DELETE' }),
   updateLocation: (id, body) => req(`/api/boats/${id}/update-location`, { method: 'POST', body: JSON.stringify(body) }),
 
   // Products
@@ -74,6 +75,9 @@ export const api = {
   adminListings: () => req('/api/admin/listings'),
   adminRemovals: () => req('/api/admin/analytics/removals'),
   adminPromote: (email) => req('/api/admin/promote', { method: 'POST', body: JSON.stringify({ email }) }),
+  adminPendingCerts: () => req('/api/admin/certifications/pending'),
+  adminApproveCert: (boatId) => req(`/api/admin/certifications/${boatId}/approve`, { method: 'POST' }),
+  adminRejectCert: (boatId, reason) => req(`/api/admin/certifications/${boatId}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
 
   // Follows
   follow: (userId) => req(`/api/users/${userId}/follow`, { method: 'POST' }),
