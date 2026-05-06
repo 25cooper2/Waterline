@@ -87,11 +87,23 @@ export default function CreateListingScreen() {
     setSubmitting(true);
     setError('');
     try {
+      // Try to capture current location so distance works for buyers
+      let lat = null, lng = null;
+      if (navigator.geolocation) {
+        try {
+          const pos = await new Promise((res, rej) =>
+            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 4000, enableHighAccuracy: false })
+          );
+          lat = pos.coords.latitude;
+          lng = pos.coords.longitude;
+        } catch {}
+      }
       await api.createProduct({
         ...form,
         price: parseFloat(form.price) || 0,
         listingType,
         images: photos,
+        lat, lng,
       });
       nav('/market');
     } catch (e) {

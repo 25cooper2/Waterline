@@ -164,9 +164,35 @@ export default function LogbookScreen() {
     notes: '',
     distance: '',
     locks: '',
+    photos: [],
   };
   const [form, setForm] = useState(blankForm);
   const [formError, setFormError] = useState('');
+  const photoInputRef = useRef(null);
+
+  const handlePhotoUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    const remaining = 4 - (form.photos?.length || 0);
+    const toAdd = files.slice(0, remaining);
+    const dataUrls = await Promise.all(toAdd.map(f => new Promise(res => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.readAsDataURL(f);
+    })));
+    setForm(f => ({ ...f, photos: [...(f.photos || []), ...dataUrls] }));
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  const handleDelete = async (entryId) => {
+    if (!confirm('Delete this logbook entry? This cannot be undone.')) return;
+    try {
+      await api.deleteLogEntry(entryId);
+      setEntries(prev => prev.filter(e => e._id !== entryId));
+      setExpandedId(null);
+    } catch (err) {
+      alert('Failed to delete: ' + err.message);
+    }
+  };
 
   /* ── handle check-in or location pick from map ─────────────── */
   useEffect(() => {
@@ -198,6 +224,15 @@ export default function LogbookScreen() {
     if (s.locationPick) {
       setShowNew(true);
       setShowLocationPicker(false);
+      // Restore editing context if we were editing before the round-trip
+      try {
+        const stash = JSON.parse(sessionStorage.getItem('wl_logbook_edit_stash') || 'null');
+        if (stash?.entry) {
+          setEditingEntry(stash.entry);
+          setForm(f => ({ ...stash.form, lat: s.lat ?? f.lat, lng: s.lng ?? f.lng, startLocation: f.startLocation }));
+        }
+        sessionStorage.removeItem('wl_logbook_edit_stash');
+      } catch {}
     }
 
     window.history.replaceState({}, '');
@@ -264,6 +299,7 @@ export default function LogbookScreen() {
       notes: entry.notes || '',
       distance: entry.distance ? String(entry.distance) : '',
       locks: entry.locks ? String(entry.locks) : '',
+      photos: entry.photos || [],
     });
     setShowNew(true);
   };
@@ -297,6 +333,7 @@ export default function LogbookScreen() {
         distance: form.distance ? parseFloat(form.distance) : undefined,
         notes: form.notes,
         locks: form.locks ? parseInt(form.locks, 10) : undefined,
+        photos: form.photos || [],
       };
       if (form.left) body.endDate = form.left;
       else body.endDate = null;
@@ -432,7 +469,7 @@ export default function LogbookScreen() {
 
                       {/* Expanded actions */}
                       {isExpanded && (
-                        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           <button className="btn ghost" style={{ fontSize: 13, padding: '6px 14px' }}
                             onClick={(e) => { e.stopPropagation(); openEdit(entry); }}>
                             <Icon name="edit" size={14} /> Edit
@@ -449,6 +486,10 @@ export default function LogbookScreen() {
                               Mark as left
                             </button>
                           )}
+                          <button className="btn ghost" style={{ fontSize: 13, padding: '6px 14px', color: 'var(--rust)' }}
+                            onClick={(e) => { e.stopPropagation(); handleDelete(entry._id); }}>
+                            <Icon name="trash" size={14} /> Delete
+                          </button>
                         </div>
                       )}
                     </div>
@@ -527,12 +568,25 @@ export default function LogbookScreen() {
 
               {/* Photos */}
               <div>
-                <label className="label">Photos</label>
+                <label className="label">Photos ({(form.photos || []).length}/4)</label>
+                <input ref={photoInputRef} type="file" accept="image/*" multiple
+                  onChange={handlePhotoUpload} style={{ display: 'none' }} />
                 <div style={styles.photosRow}>
-                  <button type="button" style={styles.photoAdd}>
-                    <Icon name="camera" size={20} color="var(--pebble)" />
-                    <span>Add</span>
-                  </button>
+                  {(form.photos || []).map((src, i) => (
+                    <div key={i} style={{
+                      width: 72, height: 72, borderRadius: 'var(--r-md)',
+                      background: `url(${src}) center/cover`, border: '1px solid var(--reed)',
+                      position: 'relative', cursor: 'pointer',
+                    }} onClick={() => setForm(f => ({ ...f, photos: f.photos.filter((_, idx) => idx !== i) }))}>
+                      <div style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>×</div>
+                    </div>
+                  ))}
+                  {(form.photos || []).length < 4 && (
+                    <button type="button" style={styles.photoAdd} onClick={() => photoInputRef.current?.click()}>
+                      <Icon name="camera" size={20} color="var(--pebble)" />
+                      <span>Add</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -568,8 +622,22 @@ export default function LogbookScreen() {
           onClose={() => setShowLocationPicker(false)}
           onPickOnMap={() => {
             setShowLocationPicker(false);
-            // Navigate to map in location-pick mode, return here with result
-            nav('/map', { state: { pickLocationFor: 'logbook' } });
+            // Stash editing context so we can restore it after the round-trip
+            try {
+              sessionStorage.setItem('wl_logbook_edit_stash', JSON.stringify({
+                entry: editingEntry,
+                form,
+              }));
+            } catch {}
+            // Reset checkin handler so the return state triggers
+            checkinHandled.current = false;
+            nav('/map', {
+              state: {
+                pickLocationFor: 'logbook',
+                lat: form.lat ?? null,
+                lng: form.lng ?? null,
+              },
+            });
           }}
         />
       )}

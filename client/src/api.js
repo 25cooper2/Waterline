@@ -21,6 +21,8 @@ export const api = {
   login: (body) => req('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   me: () => req('/api/auth/me'),
   updateMe: (body) => req('/api/auth/me', { method: 'PUT', body: JSON.stringify(body) }),
+  forgotPassword: (body) => req('/api/auth/forgot', { method: 'POST', body: JSON.stringify(body) }),
+  resetPassword: (body) => req('/api/auth/reset', { method: 'POST', body: JSON.stringify(body) }),
 
   // Boats
   createBoat: (body) => req('/api/boats', { method: 'POST', body: JSON.stringify(body) }),

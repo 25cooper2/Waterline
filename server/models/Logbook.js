@@ -14,6 +14,7 @@ const logbookSchema = new mongoose.Schema({
   conditions: { type: String, default: null },
   fuelUsed: { type: Number, default: null },
   notes: { type: String, default: null },
+  photos: [{ type: String }],
   highlights: { type: String, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

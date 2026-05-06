@@ -71,12 +71,13 @@ function makeEmojiIcon(emoji) {
   });
 }
 
-function makeLockIcon(label) {
+function makeLockIcon(label, showLabel) {
   const safe = label.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+  const labelHtml = showLabel ? `<div style="position:absolute;left:12px;top:-9px;background:rgba(255,255,255,0.95);border:1px solid #333;border-radius:3px;padding:2px 6px;font-size:11px;font-weight:700;color:#111;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);font-family:var(--font-sans, sans-serif)">${safe}</div>` : '';
   return L.divIcon({
     html: `<div style="position:relative;width:0;height:0;display:flex;align-items:center;pointer-events:auto">
       <div style="position:absolute;left:-7px;top:-7px;width:14px;height:14px;border-radius:50%;background:#111;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.6);z-index:2"></div>
-      <div style="position:absolute;left:12px;top:-9px;background:rgba(255,255,255,0.95);border:1px solid #333;border-radius:3px;padding:2px 6px;font-size:11px;font-weight:700;color:#111;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);font-family:var(--font-sans, sans-serif)">${safe}</div>
+      ${labelHtml}
     </div>`,
     className: 'lock-marker',
     iconSize: [0, 0],
@@ -234,6 +235,9 @@ export default function MapScreen() {
   useEffect(() => {
     if (routeLocation.state?.pickLocationFor) {
       setLocationPickMode('pick-for-' + routeLocation.state.pickLocationFor);
+      // Fly to existing pin if provided so the user starts where they left off
+      const { lat, lng } = routeLocation.state;
+      if (lat != null && lng != null) setFlyTarget([lat, lng]);
       window.history.replaceState({}, '');
     }
   }, []);
@@ -550,9 +554,10 @@ out center geom qt;`;
           if (!canalFilters[f.ftype]) return null;
           const meta = FEATURE_META[f.ftype];
           if (!meta) return null;
-          const icon = f.ftype === 'lock' ? makeLockIcon(f.name) : makeEmojiIcon(meta.emoji);
+          const showLockLabel = mapZoom >= 16;
+          const icon = f.ftype === 'lock' ? makeLockIcon(f.name, showLockLabel) : makeEmojiIcon(meta.emoji);
           return (
-            <Marker key={f.id} position={[f.lat, f.lng]} icon={icon}>
+            <Marker key={`${f.id}-${f.ftype === 'lock' ? (showLockLabel ? 'L' : 'D') : 'E'}`} position={[f.lat, f.lng]} icon={icon}>
               <Popup><div style={{ fontSize: 12 }}><strong>{f.name}</strong></div></Popup>
             </Marker>
           );
@@ -645,25 +650,8 @@ out center geom qt;`;
       {!locationPickMode && (
         <div style={{ position: 'absolute', right: 12, top: 120, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <CtrlBtn onClick={goToMyLocation}><Icon name="compass" size={20} color="var(--moss)" stroke={1.8} /></CtrlBtn>
-          <CtrlBtn onClick={() => fileInputRef.current?.click()} title="Import pins from Google My Maps">
-            <span style={{ fontSize: 18 }}>📲</span>
-          </CtrlBtn>
-          {myMapsPins.length > 0 && (
-            <CtrlBtn onClick={() => { setMyMapsPins([]); localStorage.removeItem('waterline_mymaps'); }} title="Clear imported pins">
-              <span style={{ fontSize: 16, cursor: 'pointer' }}>✕</span>
-            </CtrlBtn>
-          )}
         </div>
       )}
-
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".kml,.geojson,.json"
-        style={{ display: 'none' }}
-        onChange={handleFileUpload}
-      />
 
       {/* Canal features filter — collapsible, left side */}
       {!locationPickMode && (

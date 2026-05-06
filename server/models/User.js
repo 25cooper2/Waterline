@@ -15,6 +15,8 @@ const userSchema = new mongoose.Schema({
   blockedUsers: [mongoose.Schema.Types.ObjectId],
   hiddenUsers: [mongoose.Schema.Types.ObjectId],
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  passwordResetToken: { type: String, default: null },
+  passwordResetExpires: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

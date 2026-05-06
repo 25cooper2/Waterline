@@ -156,11 +156,15 @@ export default function ProductDetailScreen() {
                 return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>Your listing</span>;
               }
               if (userLoc && product.lat && product.lng) {
+                const mi = distanceMi(userLoc.lat, userLoc.lng, product.lat, product.lng);
                 return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>
-                  {distanceMi(userLoc.lat, userLoc.lng, product.lat, product.lng).toFixed(1)} mi
+                  {mi < 0.1 ? 'Here' : `${mi.toFixed(1)} mi away`}
                 </span>;
               }
-              return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px', color: 'var(--silt)' }}>Distance unavailable</span>;
+              if (!userLoc) {
+                return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px', color: 'var(--silt)' }}>Enable location for distance</span>;
+              }
+              return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px', color: 'var(--silt)' }}>No pickup location set</span>;
             })()}
           </div>
 

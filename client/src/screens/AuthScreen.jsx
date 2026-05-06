@@ -145,7 +145,7 @@ export default function AuthScreen() {
               {tab === 'login' && (
                 <button
                   type="button"
-                  onClick={() => {}}
+                  onClick={() => nav('/forgot-password')}
                   style={{
                     background: 'none',
                     border: 'none',

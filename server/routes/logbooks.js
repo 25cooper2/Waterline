@@ -8,7 +8,7 @@ const router = express.Router();
 // Create logbook entry
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { boatId, entryDate, endDate, startLocation, endLocation, lat, lng, distance, locks, weather, conditions, fuelUsed, notes, highlights } = req.body;
+    const { boatId, entryDate, endDate, startLocation, endLocation, lat, lng, distance, locks, weather, conditions, fuelUsed, notes, highlights, photos } = req.body;
 
     if (!boatId || !entryDate) {
       return res.status(400).json({ error: 'Boat ID and entry date required' });
@@ -39,7 +39,8 @@ router.post('/', authMiddleware, async (req, res) => {
       conditions: conditions || null,
       fuelUsed: fuelUsed || null,
       notes: notes || null,
-      highlights: highlights || null
+      highlights: highlights || null,
+      photos: Array.isArray(photos) ? photos : [],
     });
 
     await logbookEntry.save();
@@ -108,7 +109,8 @@ router.put('/:logbookId', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    const { entryDate, startLocation, endLocation, lat, lng, distance, locks, endDate, weather, conditions, fuelUsed, notes, highlights } = req.body;
+    const { entryDate, startLocation, endLocation, lat, lng, distance, locks, endDate, weather, conditions, fuelUsed, notes, highlights, photos } = req.body;
+    if (Array.isArray(photos)) entry.photos = photos;
     if (entryDate !== undefined) entry.entryDate = new Date(entryDate);
     if (startLocation !== undefined) entry.startLocation = startLocation;
     if (endLocation !== undefined) entry.endLocation = endLocation;
