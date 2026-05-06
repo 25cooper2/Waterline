@@ -9,6 +9,7 @@ import Icon from '../components/Icon';
 import Plate from '../components/Plate';
 import BottomSheet from '../components/BottomSheet';
 import { getCachedLocation, saveDeviceLocation } from '../utils/deviceLocation';
+import { routeAlongWaterway } from '../utils/waterwayRouter';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -99,6 +100,18 @@ function makeLogbookPinIcon() {
     className: 'logbook-marker',
     iconSize: [14, 14],
     iconAnchor: [7, 7],
+  });
+}
+
+// Draggable midpoint handle for rerouting journey segments
+function makeWaypointHandleIcon() {
+  return L.divIcon({
+    html: `<div style="width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,0.97);border:2.5px solid #111;box-shadow:0 1px 6px rgba(0,0,0,0.45);cursor:grab;display:flex;align-items:center;justify-content:center">
+      <div style="width:5px;height:5px;border-radius:50%;background:#111;opacity:0.45"></div>
+    </div>`,
+    className: 'journey-wp-handle',
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
   });
 }
 
@@ -259,6 +272,11 @@ export default function MapScreen() {
       return [];
     }
   });
+  // Canal-routing state: one entry per segment between consecutive logbook entries
+  const [journeyRoutes, setJourneyRoutes] = useState([]); // [[lat,lng][]|null, …]
+  const [journeyWaypoints, setJourneyWaypoints] = useState({}); // segIdx → {lat,lng}
+  const journeyWaypointsRef = useRef({}); // kept in sync; safe to read inside async callbacks
+
   const searchTimeout = useRef(null);
   const overpassTimeout = useRef(null);
   const fileInputRef = useRef(null);
@@ -285,6 +303,51 @@ export default function MapScreen() {
       .then(data => setLogbookEntries((data.entries || []).filter(e => e.lat && e.lng)))
       .catch(() => {});
   }, [user]);
+
+  // Compute canal routes for every pair of consecutive logbook entries
+  useEffect(() => {
+    if (!filters.logbook || logbookEntries.length < 2) {
+      setJourneyRoutes([]);
+      return;
+    }
+    let cancelled = false;
+    const sorted = [...logbookEntries].sort(
+      (a, b) => new Date(a.entryDate || a.arrived) - new Date(b.entryDate || b.arrived)
+    );
+    Promise.all(
+      sorted.slice(0, -1).map((e, i) =>
+        routeAlongWaterway(
+          e.lat, e.lng,
+          sorted[i + 1].lat, sorted[i + 1].lng,
+          journeyWaypointsRef.current[i] || null
+        ).catch(() => null)
+      )
+    ).then(routes => {
+      if (!cancelled) setJourneyRoutes(routes);
+    });
+    return () => { cancelled = true; };
+  }, [filters.logbook, logbookEntries]);
+
+  // Re-route a single segment after the user drags a waypoint handle
+  const rerouteSegment = (segIdx, via) => {
+    const sorted = [...logbookEntries].sort(
+      (a, b) => new Date(a.entryDate || a.arrived) - new Date(b.entryDate || b.arrived)
+    );
+    if (segIdx >= sorted.length - 1) return;
+    routeAlongWaterway(
+      sorted[segIdx].lat, sorted[segIdx].lng,
+      sorted[segIdx + 1].lat, sorted[segIdx + 1].lng,
+      via
+    )
+      .then(route => {
+        setJourneyRoutes(prev => {
+          const next = [...prev];
+          next[segIdx] = route;
+          return next;
+        });
+      })
+      .catch(() => {});
+  };
 
   // Latest entry without an end date = "moored here" — the round profile pin
   const currentMooring = logbookEntries.find(e => !e.endDate && !e.left) || null;
@@ -620,14 +683,46 @@ out center geom qt;`;
             eventHandlers={{ click: () => setSelectedPin({ kind: 'hazard', ...h }) }} />
         ))}
 
-        {/* Logbook journey line — oldest to newest, drawn before pins so pins sit on top */}
+        {/* Journey polylines — solid when routed along canal, dashed straight-line fallback */}
         {filters.logbook && (() => {
           const sorted = [...logbookEntries].sort((a, b) => new Date(a.entryDate || a.arrived) - new Date(b.entryDate || b.arrived));
-          const coords = sorted.map(e => [e.lat, e.lng]);
-          return coords.length > 1 ? (
-            <Polyline positions={coords} pathOptions={{ color: '#111', weight: 2.5, opacity: 0.7, dashArray: '6 5' }} />
-          ) : null;
+          if (sorted.length < 2) return null;
+          return sorted.slice(0, -1).map((entry, i) => {
+            const route = journeyRoutes[i];
+            const positions = route || [[entry.lat, entry.lng], [sorted[i + 1].lat, sorted[i + 1].lng]];
+            return (
+              <Polyline
+                key={`journey-seg-${i}`}
+                positions={positions}
+                pathOptions={{ color: '#111', weight: 2.5, opacity: 0.7, dashArray: route ? undefined : '6 5' }}
+              />
+            );
+          });
         })()}
+
+        {/* Draggable midpoint handles — lets user drag to select an alternate canal route */}
+        {filters.logbook && journeyRoutes.map((route, i) => {
+          if (!route || route.length < 3) return null;
+          const midIdx = Math.floor(route.length / 2);
+          const [midLat, midLng] = route[midIdx];
+          return (
+            <Marker
+              key={`journey-wp-${i}`}
+              position={[midLat, midLng]}
+              icon={makeWaypointHandleIcon()}
+              draggable={true}
+              eventHandlers={{
+                dragend: (e) => {
+                  const { lat, lng } = e.target.getLatLng();
+                  const via = { lat, lng };
+                  journeyWaypointsRef.current[i] = via;
+                  setJourneyWaypoints(prev => ({ ...prev, [i]: via }));
+                  rerouteSegment(i, via);
+                },
+              }}
+            />
+          );
+        })}
 
         {/* Logbook pins (past moorings) — Marker+DivIcon so they render in markerPane above waterway lines */}
         {filters.logbook && logbookEntries
