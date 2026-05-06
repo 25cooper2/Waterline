@@ -71,6 +71,24 @@ function makeEmojiIcon(emoji) {
   });
 }
 
+// Round profile-photo pin for "moored here" location.
+// Falls back to a coloured circle with the user's initial if no photo.
+function makeAvatarPinIcon({ photoUrl, name = '?', color = '#1A6B5A' }) {
+  const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+  const inner = photoUrl
+    ? `<img src="${photoUrl}" style="width:100%;height:100%;object-fit:cover;display:block" />`
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:${color};color:#fff;font-weight:700;font-size:18px;font-family:var(--font-sans, sans-serif)">${initial}</div>`;
+  return L.divIcon({
+    html: `<div style="position:relative;width:0;height:0">
+      <div style="position:absolute;left:-22px;top:-22px;width:44px;height:44px;border-radius:50%;background:#fff;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);overflow:hidden">${inner}</div>
+      <div style="position:absolute;left:-7px;top:18px;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:10px solid #fff;filter:drop-shadow(0 2px 2px rgba(0,0,0,0.3))"></div>
+    </div>`,
+    className: 'mooring-pin',
+    iconSize: [0, 0],
+    iconAnchor: [0, 28], // tip of the teardrop sits on the coords
+  });
+}
+
 function makeLockIcon(label, showLabel) {
   const safe = label.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
   const labelHtml = showLabel ? `<div style="position:absolute;left:12px;top:-9px;background:rgba(255,255,255,0.95);border:1px solid #333;border-radius:3px;padding:2px 6px;font-size:11px;font-weight:700;color:#111;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);font-family:var(--font-sans, sans-serif)">${safe}</div>` : '';
@@ -253,6 +271,9 @@ export default function MapScreen() {
       .then(data => setLogbookEntries((data.entries || []).filter(e => e.lat && e.lng)))
       .catch(() => {});
   }, [user]);
+
+  // Latest entry without an end date = "moored here" — the round profile pin
+  const currentMooring = logbookEntries.find(e => !e.endDate && !e.left) || null;
 
   const goToMyLocation = () => {
     if (!navigator.geolocation) return;
@@ -577,12 +598,27 @@ out center geom qt;`;
             eventHandlers={{ click: () => setSelectedPin({ kind: 'hazard', ...h }) }} />
         ))}
 
-        {/* Logbook pins */}
-        {filters.logbook && logbookEntries.map(e => (
-          <CircleMarker key={e._id} center={[e.lat, e.lng]} radius={7}
-            pathOptions={{ color: '#1A6B5A', fillColor: '#1A6B5A', fillOpacity: 0.7, weight: 2 }}
-            eventHandlers={{ click: () => setSelectedPin({ kind: 'logbook', ...e }) }} />
-        ))}
+        {/* Logbook pins (past moorings) — only when filter is on */}
+        {filters.logbook && logbookEntries
+          .filter(e => e._id !== currentMooring?._id)
+          .map(e => (
+            <CircleMarker key={e._id} center={[e.lat, e.lng]} radius={7}
+              pathOptions={{ color: '#1A6B5A', fillColor: '#1A6B5A', fillOpacity: 0.7, weight: 2 }}
+              eventHandlers={{ click: () => setSelectedPin({ kind: 'logbook', ...e }) }} />
+          ))}
+
+        {/* Current mooring — round profile-photo pin, always visible */}
+        {currentMooring && (
+          <Marker
+            key={`moor-${currentMooring._id}-${user?.profilePhotoUrl ? 'p' : 'i'}`}
+            position={[currentMooring.lat, currentMooring.lng]}
+            icon={makeAvatarPinIcon({
+              photoUrl: user?.profilePhotoUrl,
+              name: user?.displayName || user?.username,
+            })}
+            eventHandlers={{ click: () => setSelectedPin({ kind: 'logbook', ...currentMooring }) }}
+          />
+        )}
 
         {/* Current location */}
         {userLocation && (
