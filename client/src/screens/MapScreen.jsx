@@ -925,20 +925,18 @@ out center geom qt;`;
             <button
               onClick={() => setEditJourney(v => !v)}
               style={{
-                width: 44, height: 44, borderRadius: 10,
-                border: '1px solid var(--reed)',
-                background: editJourney ? 'var(--moss-soft)' : 'var(--paper)',
+                height: 44, padding: '0 12px', borderRadius: 10,
+                border: 'none',
+                background: editJourney ? '#333' : '#666',
+                color: '#fff',
                 boxShadow: 'var(--sh-1)',
                 cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-sans)',
               }}
-              title={editJourney ? 'Done editing route' : 'Edit route'}
             >
-              <Icon
-                name={editJourney ? 'check' : 'edit'}
-                size={20}
-                color={editJourney ? 'var(--moss)' : 'var(--silt)'}
-              />
+              <Icon name={editJourney ? 'check' : 'edit'} size={16} color="#fff" />
+              {editJourney ? 'Done' : 'Edit route'}
             </button>
           )}
         </div>
