@@ -1,10 +1,9 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
-import LoginWall from '../components/LoginWall';
 import Plate from '../components/Plate';
 import { getCachedLocation } from '../utils/deviceLocation';
 
@@ -15,8 +14,18 @@ const HAIL_REASONS = [
   'General hello',
 ];
 
-const THREAD_FILTERS = ['All', 'Unread', 'Market', 'Hails', 'CRT'];
-const FEED_SCOPES = ['Nearby', 'Following', 'All'];
+const SCOPES = [
+  { id: 'nearby', label: 'Nearby' },
+  { id: 'following', label: 'Following' },
+  { id: 'all', label: 'All' },
+];
+
+const RADIUS_OPTIONS = [
+  { mi: 0.62,  label: 'Within 1 km' },
+  { mi: 5,     label: 'Within 5 mi (default)' },
+  { mi: 6.21,  label: 'Within 10 km' },
+  { mi: 25,    label: 'Within 25 mi' },
+];
 
 function timeAgo(date) {
   const diff = Date.now() - new Date(date).getTime();
@@ -30,134 +39,95 @@ function timeAgo(date) {
   return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-function threadKind(msgs) {
-  const last = msgs[msgs.length - 1];
-  if (last?.kind === 'official' || last?.kind === 'crt') return 'official';
-  if (last?.kind === 'hail' || last?.isHail) return 'hail';
-  if (last?.productId || last?.product) return 'market';
-  return null;
-}
-
-function KindBadge({ kind }) {
-  if (kind === 'official') return <span className="chip moss" style={{ height: 20, fontSize: 11, padding: '0 7px', gap: 3 }}><Icon name="shield" size={11} />Official</span>;
-  if (kind === 'hail') return <span className="chip amber" style={{ height: 20, fontSize: 11, padding: '0 7px', gap: 3 }}><Icon name="send" size={11} />Hail</span>;
-  return null;
-}
-
 export default function InboxScreen() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Top tab — Threads vs Feed
-  const [topTab, setTopTab] = useState('Threads');
-
-  // Threads state
-  const [messages, setMessages] = useState([]);
-  const [threadsLoading, setThreadsLoading] = useState(true);
-  const [threadFilter, setThreadFilter] = useState('All');
-
-  // Feed state
   const [posts, setPosts] = useState([]);
-  const [postsLoading, setPostsLoading] = useState(false);
-  const [feedScope, setFeedScope] = useState('Nearby');
+  const [loading, setLoading] = useState(false);
+  const [scope, setScope] = useState('nearby');
+  const [radiusMi, setRadiusMi] = useState(5);
+  const [showRadius, setShowRadius] = useState(false);
   const [feedQuery, setFeedQuery] = useState('');
   const [activeTag, setActiveTag] = useState(null);
   const [trendingTags, setTrendingTags] = useState([]);
 
-  // + dropdown menu
   const [menuOpen, setMenuOpen] = useState(false);
-
-  // Modals
   const [showHail, setShowHail] = useState(false);
   const [showPost, setShowPost] = useState(false);
+  const [showLoginGate, setShowLoginGate] = useState(false);
+  const [openPostId, setOpenPostId] = useState(null);
 
-  // Hail form
   const [hailForm, setHailForm] = useState({ recipientBoatIndexNumber: '', body: '', reason: '' });
   const [hailError, setHailError] = useState('');
   const [hailNotFound, setHailNotFound] = useState(false);
 
-  // Post form
   const [postForm, setPostForm] = useState({ body: '', tags: '', includeLocation: true });
   const [postError, setPostError] = useState('');
   const [postSubmitting, setPostSubmitting] = useState(false);
-
+  const [tagInput, setTagInput] = useState('');
+  const [tagSuggestions, setTagSuggestions] = useState([]);
+  const tagSearchTimer = useRef(null);
   const searchTimeout = useRef(null);
 
-  /* ---- load threads ---- */
-  useEffect(() => {
-    if (!user) return;
-    api.inbox().then(setMessages).catch(() => {}).finally(() => setThreadsLoading(false));
-  }, [user]);
+  const requireLogin = () => {
+    if (!user) { setShowLoginGate(true); return false; }
+    return true;
+  };
 
   /* ---- load feed ---- */
   const loadFeed = () => {
-    if (!user) return;
-    setPostsLoading(true);
+    setLoading(true);
     const params = {};
-    if (feedScope === 'Nearby') {
+    if (scope === 'nearby') {
       const cached = getCachedLocation();
       if (cached) {
         params.lat = cached.lat;
         params.lng = cached.lng;
-        params.radius = 5;
+        params.radius = radiusMi;
       }
-    } else if (feedScope === 'Following') {
+    } else if (scope === 'following') {
+      if (!user) { setLoading(false); setPosts([]); return; }
       params.followingOnly = 'true';
     }
     if (activeTag) params.tag = activeTag;
     if (feedQuery.trim()) params.q = feedQuery.trim();
-    api.listPosts(params).then(setPosts).catch(() => setPosts([])).finally(() => setPostsLoading(false));
+    api.listPosts(params).then(setPosts).catch(() => setPosts([])).finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    if (topTab !== 'Feed' || !user) return;
     clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(loadFeed, feedQuery ? 300 : 0);
     return () => clearTimeout(searchTimeout.current);
-  }, [topTab, feedScope, activeTag, feedQuery, user]);
+  }, [scope, radiusMi, activeTag, feedQuery, user]);
 
   useEffect(() => {
-    if (topTab !== 'Feed') return;
     api.trendingTags().then(setTrendingTags).catch(() => {});
-  }, [topTab]);
+  }, []);
 
-  if (!user) return <LoginWall tab="inbox" />;
+  /* ---- tag autocomplete ---- */
+  useEffect(() => {
+    clearTimeout(tagSearchTimer.current);
+    const last = tagInput.split(/[,\s]+/).pop() || '';
+    const cleaned = last.replace(/^#/, '').toLowerCase();
+    if (cleaned.length < 2) { setTagSuggestions([]); return; }
+    tagSearchTimer.current = setTimeout(() => {
+      api.searchTags(cleaned).then(setTagSuggestions).catch(() => setTagSuggestions([]));
+    }, 200);
+    return () => clearTimeout(tagSearchTimer.current);
+  }, [tagInput]);
 
-  /* ---- threads grouping ---- */
-  const threads = useMemo(() => {
-    const grouped = messages.reduce((acc, m) => {
-      const otherId = (m.senderId?._id || m.senderId) === user._id
-        ? (m.recipientId?._id || m.recipientId)
-        : (m.senderId?._id || m.senderId);
-      const key = otherId || 'unknown';
-      if (!acc[key]) {
-        const otherUser = (m.senderId?._id || m.senderId) === user._id ? m.recipientId : m.senderId;
-        acc[key] = { id: key, other: otherUser, messages: [], unread: 0 };
-      }
-      acc[key].messages.push(m);
-      if (!m.isRead && (m.senderId?._id || m.senderId) !== user._id) acc[key].unread++;
-      return acc;
-    }, {});
-    return Object.values(grouped).sort((a, b) => {
-      const aT = new Date(a.messages[a.messages.length - 1].createdAt).getTime();
-      const bT = new Date(b.messages[b.messages.length - 1].createdAt).getTime();
-      return bT - aT;
-    });
-  }, [messages, user._id]);
-
-  const filteredThreads = useMemo(() => {
-    if (threadFilter === 'All') return threads;
-    if (threadFilter === 'Unread') return threads.filter(t => t.unread > 0);
-    if (threadFilter === 'Market') return threads.filter(t => threadKind(t.messages) === 'market');
-    if (threadFilter === 'Hails') return threads.filter(t => threadKind(t.messages) === 'hail');
-    if (threadFilter === 'CRT') return threads.filter(t => threadKind(t.messages) === 'official');
-    return threads;
-  }, [threads, threadFilter]);
-
-  const totalUnread = threads.reduce((n, t) => n + t.unread, 0);
+  const completeTag = (tag) => {
+    const parts = tagInput.split(/[,\s]+/);
+    parts[parts.length - 1] = tag;
+    const joined = parts.filter(Boolean).join(' ') + ' ';
+    setTagInput(joined);
+    setTagSuggestions([]);
+  };
 
   /* ---- hail ---- */
   const openHail = () => {
+    if (!requireLogin()) return;
     setHailForm({ recipientBoatIndexNumber: '', body: '', reason: '' });
     setHailError(''); setHailNotFound(false); setShowHail(true);
   };
@@ -171,17 +141,17 @@ export default function InboxScreen() {
         reason: hailForm.reason || undefined,
       });
       setShowHail(false);
-      const fresh = await api.inbox();
-      setMessages(fresh);
     } catch (e) {
       if (e.message === 'boat_not_found' || e.message?.includes('not on Waterline')) setHailNotFound(true);
       else setHailError(e.message);
     }
   };
 
-  /* ---- post to feed ---- */
+  /* ---- post ---- */
   const openPostComposer = () => {
+    if (!requireLogin()) return;
     setPostForm({ body: '', tags: '', includeLocation: true });
+    setTagInput('');
     setPostError(''); setShowPost(true);
   };
 
@@ -190,54 +160,39 @@ export default function InboxScreen() {
     setPostSubmitting(true);
     setPostError('');
     try {
-      const body = { body: postForm.body.trim(), tags: postForm.tags };
+      const body = { body: postForm.body.trim(), tags: tagInput };
       if (postForm.includeLocation) {
         const cached = getCachedLocation();
         if (cached) { body.lat = cached.lat; body.lng = cached.lng; }
       }
       await api.createPost(body);
       setShowPost(false);
-      setTopTab('Feed');
       loadFeed();
     } catch (e) { setPostError(e.message); }
     setPostSubmitting(false);
   };
 
-  /* ---- + menu actions ---- */
-  const onMenuHail = () => { setMenuOpen(false); openHail(); };
-  const onMenuPost = () => { setMenuOpen(false); openPostComposer(); };
-
   return (
     <div className="screen">
-      {/* --- Header --- */}
+      {/* Header */}
       <div className="appbar" style={{ height: 'auto', padding: '14px 20px 0', flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <h1 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', margin: 0, lineHeight: 1.1 }}>Chats</h1>
+            <h1 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', margin: 0, lineHeight: 1.1 }}>Feed</h1>
             <div style={{ fontSize: 13, color: 'var(--silt)', marginTop: 4 }}>
-              {topTab === 'Threads'
-                ? `${totalUnread} unread · ${threads.length} conversation${threads.length !== 1 ? 's' : ''}`
-                : `${posts.length} post${posts.length !== 1 ? 's' : ''}${feedScope === 'Nearby' ? ' nearby' : ''}`}
+              {posts.length} post{posts.length !== 1 ? 's' : ''}{scope === 'nearby' ? ' nearby' : scope === 'following' ? ' from people you follow' : ''}
             </div>
           </div>
           <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setMenuOpen(o => !o)}
-              className="btn primary"
-              style={{ width: 40, height: 40, padding: 0, borderRadius: 'var(--r-pill)', flexShrink: 0 }}
-              aria-label="New"
-            >
+            <button onClick={() => setMenuOpen(o => !o)} className="btn primary"
+              style={{ width: 40, height: 40, padding: 0, borderRadius: 'var(--r-pill)', flexShrink: 0 }} aria-label="New">
               <Icon name="plus" size={20} />
             </button>
             {menuOpen && (
               <>
                 <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1500 }} />
-                <div style={{
-                  position: 'absolute', top: 46, right: 0, zIndex: 1600,
-                  background: 'var(--paper)', borderRadius: 12, boxShadow: 'var(--sh-3)',
-                  border: '1px solid var(--reed)', minWidth: 200, overflow: 'hidden',
-                }}>
-                  <button onClick={onMenuHail} style={menuItemStyle}>
+                <div style={{ position: 'absolute', top: 46, right: 0, zIndex: 1600, background: 'var(--paper)', borderRadius: 12, boxShadow: 'var(--sh-3)', border: '1px solid var(--reed)', minWidth: 200, overflow: 'hidden' }}>
+                  <button onClick={() => { setMenuOpen(false); openHail(); }} style={menuItemStyle}>
                     <Icon name="send" size={16} color="var(--moss)" />
                     <div style={{ flex: 1, textAlign: 'left' }}>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>Hail a boat</div>
@@ -245,7 +200,7 @@ export default function InboxScreen() {
                     </div>
                   </button>
                   <div style={{ height: 1, background: 'var(--reed)' }} />
-                  <button onClick={onMenuPost} style={menuItemStyle}>
+                  <button onClick={() => { setMenuOpen(false); openPostComposer(); }} style={menuItemStyle}>
                     <Icon name="image" size={16} color="var(--moss)" />
                     <div style={{ flex: 1, textAlign: 'left' }}>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>Post to feed</div>
@@ -257,186 +212,147 @@ export default function InboxScreen() {
             )}
           </div>
         </div>
+      </div>
 
-        {/* Top tab switcher */}
-        <div style={{ display: 'flex', gap: 0, marginTop: 14, borderBottom: '1px solid var(--reed)' }}>
-          {['Threads', 'Feed'].map(t => (
-            <button key={t} onClick={() => setTopTab(t)} style={{
-              flex: 1, padding: '10px 0', background: 'none', border: 0, cursor: 'pointer',
-              fontSize: 14, fontWeight: topTab === t ? 700 : 500,
-              color: topTab === t ? 'var(--ink)' : 'var(--silt)',
-              borderBottom: topTab === t ? '2px solid var(--ink)' : '2px solid transparent',
-              fontFamily: 'var(--font-sans)',
-            }}>{t}</button>
-          ))}
+      {/* Search bar */}
+      <div style={{ padding: '10px 20px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--linen)', borderRadius: 10, padding: '8px 12px' }}>
+          <Icon name="search" size={16} color="var(--silt)" />
+          <input value={feedQuery} onChange={e => setFeedQuery(e.target.value)}
+            placeholder="Search posts, #tags or friends…"
+            style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 14, fontFamily: 'var(--font-sans)', minWidth: 0 }} />
+          {(feedQuery || activeTag) && (
+            <button onClick={() => { setFeedQuery(''); setActiveTag(null); }} style={{ background: 'none', border: 0, cursor: 'pointer', padding: 2, color: 'var(--silt)' }}>
+              <Icon name="close" size={14} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* === THREADS === */}
-      {topTab === 'Threads' && (
-        <>
-          <div style={{ display: 'flex', gap: 8, padding: '10px 20px', overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none' }}>
-            {THREAD_FILTERS.map(f => (
-              <button key={f} className={`chip${threadFilter === f ? ' active' : ''}`}
-                onClick={() => setThreadFilter(f)} style={{ border: 0 }}>{f}</button>
-            ))}
-          </div>
-          <div className="scroll">
-            {threadsLoading ? (
-              <div style={{ padding: 40, textAlign: 'center', color: 'var(--silt)' }}>Loading...</div>
-            ) : filteredThreads.length === 0 ? (
-              <div style={{ padding: 48, textAlign: 'center', color: 'var(--silt)' }}>
-                <Icon name="inbox" size={40} color="var(--pebble)" />
-                <p style={{ margin: '12px 0 4px', fontWeight: 500, fontSize: 16, color: 'var(--ink)' }}>
-                  {threadFilter === 'All' ? 'No messages yet' : `No ${threadFilter.toLowerCase()} messages`}
-                </p>
-                <p style={{ fontSize: 14, lineHeight: 1.5, maxWidth: 260, margin: '0 auto' }}>
-                  {threadFilter === 'All' ? 'Hail a nearby boat by their index number to start a conversation.' : 'Nothing here right now.'}
-                </p>
-              </div>
-            ) : (
-              filteredThreads.map(thread => {
-                const last = thread.messages[thread.messages.length - 1];
-                const other = thread.other;
-                const name = other?.displayName || 'Unknown';
-                const plate = other?.boat?.boatIndexNumber || other?.boatIndexNumber;
-                const kind = threadKind(thread.messages);
-                const hasUnread = thread.unread > 0;
-                return (
-                  <div key={thread.id} className="row" style={{ cursor: 'pointer', padding: '14px 20px', gap: 12, alignItems: 'flex-start' }}
-                    onClick={() => navigate(`/inbox/${thread.id}`)}>
-                    <Avatar name={name} size={44} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontWeight: hasUnread ? 700 : 500, fontSize: 15, flexShrink: 0 }}>{name}</span>
-                        {plate && <Plate>{plate}</Plate>}
-                        <KindBadge kind={kind} />
-                        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--silt)', flexShrink: 0 }}>{timeAgo(last.createdAt)}</span>
-                      </div>
-                      {last.subject && (
-                        <div className="truncate" style={{ fontSize: 14, fontWeight: hasUnread ? 600 : 400, lineHeight: 1.3 }}>{last.subject}</div>
-                      )}
-                      <div className="truncate" style={{ fontSize: 13.5, color: 'var(--silt)', marginTop: 1, lineHeight: 1.35, fontWeight: hasUnread ? 500 : 400 }}>
-                        {last.body || ''}
-                      </div>
-                    </div>
-                    {hasUnread && <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--moss)', flexShrink: 0, marginTop: 6 }} />}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </>
+      {/* Scope chips */}
+      <div style={{ display: 'flex', gap: 8, padding: '10px 20px 0', overflowX: 'auto', scrollbarWidth: 'none', position: 'relative' }}>
+        {SCOPES.map(s => (
+          <button key={s.id} className={`chip${scope === s.id ? ' active' : ''}`}
+            onClick={() => {
+              if (s.id === 'nearby') { if (scope === 'nearby') { setShowRadius(o => !o); } else { setScope('nearby'); } }
+              else { setScope(s.id); setShowRadius(false); }
+            }}
+            style={{ border: 0 }}>
+            {s.id === 'nearby' && <Icon name="pin" size={12} />}
+            {s.id === 'following' && <Icon name="friend" size={12} />}
+            {s.id === 'nearby' ? `${s.label} · ${radiusMi < 1 ? '1 km' : radiusMi === 6.21 ? '10 km' : `${radiusMi} mi`}` : s.label}
+            {s.id === 'nearby' && <Icon name="chevron" size={10} />}
+          </button>
+        ))}
+        {showRadius && (
+          <>
+            <div onClick={() => setShowRadius(false)} style={{ position: 'fixed', inset: 0, zIndex: 1500 }} />
+            <div style={{ position: 'absolute', top: 44, left: 20, zIndex: 1600, background: 'var(--paper)', borderRadius: 12, boxShadow: 'var(--sh-3)', border: '1px solid var(--reed)', minWidth: 220, overflow: 'hidden' }}>
+              {RADIUS_OPTIONS.map(o => (
+                <button key={o.mi} onClick={() => { setRadiusMi(o.mi); setScope('nearby'); setShowRadius(false); }}
+                  style={{ ...menuItemStyle, justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 14 }}>{o.label}</span>
+                  {radiusMi === o.mi && <Icon name="check" size={14} color="var(--moss)" />}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Active tag pill */}
+      {activeTag && (
+        <div style={{ padding: '8px 20px 0' }}>
+          <span className="chip amber" style={{ cursor: 'default' }}>
+            #{activeTag}
+            <button onClick={() => setActiveTag(null)} style={{ marginLeft: 6, background: 'none', border: 0, cursor: 'pointer', display: 'flex' }}>
+              <Icon name="close" size={12} />
+            </button>
+          </span>
+        </div>
       )}
 
-      {/* === FEED === */}
-      {topTab === 'Feed' && (
-        <>
-          {/* Search bar */}
-          <div style={{ padding: '10px 20px 0' }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              background: 'var(--linen)', borderRadius: 10, padding: '8px 12px',
-            }}>
-              <Icon name="search" size={16} color="var(--silt)" />
-              <input
-                value={feedQuery}
-                onChange={e => setFeedQuery(e.target.value)}
-                placeholder="Search posts, #tags or friends…"
-                style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 14, fontFamily: 'var(--font-sans)', minWidth: 0 }}
-              />
-              {(feedQuery || activeTag) && (
-                <button onClick={() => { setFeedQuery(''); setActiveTag(null); }}
-                  style={{ background: 'none', border: 0, cursor: 'pointer', padding: 2, color: 'var(--silt)' }}>
-                  <Icon name="close" size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Scope chips */}
-          <div style={{ display: 'flex', gap: 8, padding: '10px 20px 0', overflowX: 'auto', scrollbarWidth: 'none' }}>
-            {FEED_SCOPES.map(s => (
-              <button key={s} className={`chip${feedScope === s ? ' active' : ''}`}
-                onClick={() => setFeedScope(s)} style={{ border: 0 }}>
-                {s === 'Nearby' && <Icon name="pin" size={12} />}
-                {s === 'Following' && <Icon name="friend" size={12} />}
-                {s}
+      {/* Trending tags */}
+      {!activeTag && !feedQuery && trendingTags.length > 0 && (
+        <div style={{ padding: '10px 20px 0' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--silt)', marginBottom: 6 }}>Trending tags</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {trendingTags.slice(0, 8).map(t => (
+              <button key={t.tag} onClick={() => setActiveTag(t.tag)} className="chip" style={{ border: '1px solid var(--reed)', background: 'var(--paper)', cursor: 'pointer' }}>
+                #{t.tag} <span style={{ color: 'var(--silt)', fontSize: 11 }}>{t.count}</span>
               </button>
             ))}
           </div>
-
-          {/* Active tag pill */}
-          {activeTag && (
-            <div style={{ padding: '8px 20px 0' }}>
-              <span className="chip amber" style={{ cursor: 'default' }}>
-                #{activeTag}
-                <button onClick={() => setActiveTag(null)} style={{ marginLeft: 6, background: 'none', border: 0, cursor: 'pointer', display: 'flex' }}>
-                  <Icon name="close" size={12} />
-                </button>
-              </span>
-            </div>
-          )}
-
-          {/* Trending tags row */}
-          {!activeTag && !feedQuery && trendingTags.length > 0 && (
-            <div style={{ padding: '10px 20px 0' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--silt)', marginBottom: 6 }}>
-                Trending tags
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {trendingTags.slice(0, 8).map(t => (
-                  <button key={t.tag} onClick={() => setActiveTag(t.tag)}
-                    className="chip" style={{ border: '1px solid var(--reed)', background: 'var(--paper)', cursor: 'pointer' }}>
-                    #{t.tag} <span style={{ color: 'var(--silt)', fontSize: 11 }}>{t.count}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="scroll" style={{ marginTop: 10 }}>
-            {postsLoading ? (
-              <div style={{ padding: 40, textAlign: 'center', color: 'var(--silt)' }}>Loading…</div>
-            ) : posts.length === 0 ? (
-              <div style={{ padding: 48, textAlign: 'center', color: 'var(--silt)' }}>
-                <Icon name="image" size={40} color="var(--pebble)" />
-                <p style={{ margin: '12px 0 4px', fontWeight: 500, fontSize: 16, color: 'var(--ink)' }}>
-                  {feedScope === 'Nearby' ? 'No posts in your area yet' : feedScope === 'Following' ? 'No posts from boaters you follow' : 'No posts match that search'}
-                </p>
-                <p style={{ fontSize: 14, lineHeight: 1.5, maxWidth: 280, margin: '0 auto' }}>
-                  Tap the + button to share what's happening on your stretch of the cut.
-                </p>
-              </div>
-            ) : (
-              posts.map(p => (
-                <PostCard
-                  key={p._id}
-                  post={p}
-                  onTagClick={(t) => { setActiveTag(t); setFeedQuery(''); }}
-                  onAuthorClick={(authorId) => navigate(`/profile/${authorId}`)}
-                />
-              ))
-            )}
-          </div>
-        </>
+        </div>
       )}
 
-      {/* ====== Hail Modal ====== */}
+      <div className="scroll" style={{ marginTop: 10 }}>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--silt)' }}>Loading…</div>
+        ) : posts.length === 0 ? (
+          <div style={{ padding: 48, textAlign: 'center', color: 'var(--silt)' }}>
+            <Icon name="image" size={40} color="var(--pebble)" />
+            <p style={{ margin: '12px 0 4px', fontWeight: 500, fontSize: 16, color: 'var(--ink)' }}>
+              {scope === 'nearby' ? 'No posts in your area yet' : scope === 'following' ? 'No posts from boaters you follow' : 'No posts match that search'}
+            </p>
+            <p style={{ fontSize: 14, lineHeight: 1.5, maxWidth: 280, margin: '0 auto' }}>
+              {user ? 'Tap the + button to share what\'s happening.' : 'Sign in to post and reply.'}
+            </p>
+          </div>
+        ) : (
+          posts.map(p => (
+            <PostCard key={p._id} post={p}
+              onTagClick={(t) => { setActiveTag(t); setFeedQuery(''); }}
+              onAuthorClick={(authorId) => navigate(`/profile/${authorId}`)}
+              onOpen={() => setOpenPostId(p._id)}
+              currentUser={user}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Post detail / reply sheet */}
+      {openPostId && (
+        <PostDetailSheet
+          postId={openPostId}
+          onClose={() => { setOpenPostId(null); loadFeed(); }}
+          requireLogin={requireLogin}
+          navigate={navigate}
+          currentUser={user}
+        />
+      )}
+
+      {/* Login gate */}
+      {showLoginGate && (
+        <div onClick={() => setShowLoginGate(false)} style={{ position: 'absolute', inset: 0, zIndex: 2000, background: 'rgba(31,42,38,0.5)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={e => e.stopPropagation()} className="sheet" style={{ width: '100%', paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}>
+            <div className="sheet-handle" />
+            <div style={{ padding: '16px 20px 0' }}>
+              <h3 style={{ margin: '0 0 6px', fontSize: 19, fontWeight: 600 }}>Sign in to join the conversation</h3>
+              <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--silt)' }}>You can browse the feed without an account, but posting and replying need a login.</p>
+              <div className="stack">
+                <button onClick={() => navigate('/auth')} className="btn primary block">Sign in or create account</button>
+                <button onClick={() => setShowLoginGate(false)} className="btn ghost block">Keep browsing</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hail Modal */}
       {showHail && (
         <div onClick={() => setShowHail(false)} style={{ position: 'absolute', inset: 0, zIndex: 2000, background: 'rgba(31,42,38,0.5)', display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} className="sheet"
-            style={{ width: '100%', paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}>
+          <div onClick={e => e.stopPropagation()} className="sheet" style={{ width: '100%', paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}>
             <div className="sheet-handle" />
             <div style={{ padding: '16px 20px 0' }}>
               {hailNotFound ? (
                 <div>
                   <h3 style={{ margin: '0 0 8px', fontSize: 19, fontWeight: 600 }}>Boat not found</h3>
                   <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--silt)', lineHeight: 1.5 }}>
-                    <strong>{hailForm.recipientBoatIndexNumber}</strong> isn't on Waterline yet. Invite the owner.
+                    <strong>{hailForm.recipientBoatIndexNumber}</strong> isn't on Waterline yet.
                   </p>
                   <div className="stack">
-                    <a href={`sms:?body=Hey, I tried to hail your boat (${hailForm.recipientBoatIndexNumber}) on Waterline. Download the app at waterline.app`}
+                    <a href={`sms:?body=Hey, I tried to hail your boat (${hailForm.recipientBoatIndexNumber}) on Waterline.`}
                       className="btn primary block" style={{ textAlign: 'center', textDecoration: 'none' }}>Invite via SMS</a>
                     <button onClick={() => setHailNotFound(false)} className="btn ghost block">Try a different boat</button>
                     <button onClick={() => setShowHail(false)} className="btn text block" style={{ color: 'var(--silt)' }}>Cancel</button>
@@ -482,17 +398,14 @@ export default function InboxScreen() {
         </div>
       )}
 
-      {/* ====== Post composer ====== */}
+      {/* Post composer */}
       {showPost && (
         <div onClick={() => setShowPost(false)} style={{ position: 'absolute', inset: 0, zIndex: 2000, background: 'rgba(31,42,38,0.5)', display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} className="sheet"
-            style={{ width: '100%', paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}>
+          <div onClick={e => e.stopPropagation()} className="sheet" style={{ width: '100%', paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}>
             <div className="sheet-handle" />
             <div style={{ padding: '16px 20px 0' }}>
               <h3 style={{ margin: '0 0 6px', fontSize: 19, fontWeight: 600 }}>Post to the feed</h3>
-              <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--silt)' }}>
-                Share with boaters in your area or use #tags so others can find it.
-              </p>
+              <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--silt)' }}>Share with boaters in your area or use #tags so others can find it.</p>
               <div className="stack">
                 <div>
                   <label className="label">What's happening?</label>
@@ -501,12 +414,25 @@ export default function InboxScreen() {
                     placeholder="e.g. Beer festival on the towpath at Victoria Park this weekend…"
                     maxLength={2000} style={{ resize: 'none' }} />
                 </div>
-                <div>
-                  <label className="label">Tags (comma or space separated)</label>
-                  <input className="field" value={postForm.tags}
-                    onChange={e => setPostForm(f => ({ ...f, tags: e.target.value }))}
+                <div style={{ position: 'relative' }}>
+                  <label className="label">Tags</label>
+                  <input className="field" value={tagInput}
+                    onChange={e => setTagInput(e.target.value)}
                     placeholder="grand-union victoria-park beer-festival" />
-                  <div style={{ fontSize: 12, color: 'var(--silt)', marginTop: 6 }}>Up to 8 tags. Skip the # — added automatically.</div>
+                  <div style={{ fontSize: 12, color: 'var(--silt)', marginTop: 6 }}>
+                    Type to search existing tags. Up to 8.
+                  </div>
+                  {tagSuggestions.length > 0 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 5, background: 'var(--paper)', border: '1px solid var(--reed)', borderRadius: 10, marginTop: 4, boxShadow: 'var(--sh-2)', overflow: 'hidden' }}>
+                      {tagSuggestions.map(s => (
+                        <button key={s.tag} type="button" onClick={() => completeTag(s.tag)}
+                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '10px 14px', background: 'none', border: 0, cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--ink)' }}>
+                          <span><span style={{ color: 'var(--moss)', fontWeight: 700 }}>#</span>{s.tag}</span>
+                          <span style={{ fontSize: 12, color: 'var(--silt)' }}>{s.count} post{s.count !== 1 ? 's' : ''}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
                   <input type="checkbox" checked={postForm.includeLocation}
@@ -537,40 +463,167 @@ const menuItemStyle = {
   cursor: 'pointer', fontFamily: 'var(--font-sans)', color: 'var(--ink)',
 };
 
-function PostCard({ post, onTagClick, onAuthorClick }) {
+function PostCard({ post, onTagClick, onAuthorClick, onOpen }) {
   const a = post.authorId || {};
-  const name = a.displayName || a.username || 'Boater';
+  const handle = a.username ? `@${a.username}` : (a.displayName || 'Boater');
   const plate = a.boatIndexNumber;
   return (
-    <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--linen)' }}>
+    <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--linen)', cursor: 'pointer' }} onClick={onOpen}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-        <div onClick={() => onAuthorClick?.(a._id)} style={{ cursor: 'pointer', flexShrink: 0 }}>
-          <Avatar name={name} src={a.profilePhotoUrl} size={42} />
+        <div onClick={(e) => { e.stopPropagation(); onAuthorClick?.(a._id); }} style={{ cursor: 'pointer', flexShrink: 0 }}>
+          <Avatar name={a.displayName || a.username} src={a.profilePhotoUrl} size={42} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-            <span onClick={() => onAuthorClick?.(a._id)} style={{ fontWeight: 600, fontSize: 14.5, cursor: 'pointer' }}>{name}</span>
+            <span onClick={(e) => { e.stopPropagation(); onAuthorClick?.(a._id); }}
+              style={{ fontWeight: 600, fontSize: 14.5, cursor: 'pointer', color: 'var(--moss)' }}>{handle}</span>
             {plate && <Plate>{plate}</Plate>}
             <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--silt)', flexShrink: 0 }}>{timeAgo(post.createdAt)}</span>
           </div>
-          <div style={{ fontSize: 14.5, color: 'var(--ink)', lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {post.body}
-          </div>
+          <div style={{ fontSize: 14.5, color: 'var(--ink)', lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{post.body}</div>
           {post.tags?.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
               {post.tags.map(t => (
-                <button key={t} onClick={() => onTagClick?.(t)}
-                  style={{ background: 'var(--moss-soft)', color: 'var(--moss)', border: 0, borderRadius: 6, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
-                  #{t}
-                </button>
+                <button key={t} onClick={(e) => { e.stopPropagation(); onTagClick?.(t); }}
+                  style={{ background: 'var(--moss-soft)', color: 'var(--moss)', border: 0, borderRadius: 6, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>#{t}</button>
               ))}
             </div>
           )}
-          {post.locationName && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: 12, color: 'var(--silt)' }}>
-              <Icon name="pin" size={12} /> {post.locationName}
+          <div style={{ display: 'flex', gap: 14, marginTop: 8, fontSize: 12.5, color: 'var(--silt)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Icon name="inbox" size={13} /> {post.replyCount || 0} repl{(post.replyCount || 0) === 1 ? 'y' : 'ies'}
+            </span>
+            {post.locationName && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Icon name="pin" size={13} /> {post.locationName}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PostDetailSheet({ postId, onClose, requireLogin, navigate, currentUser }) {
+  const [post, setPost] = useState(null);
+  const [reply, setReply] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [reportSent, setReportSent] = useState(false);
+
+  useEffect(() => {
+    api.getPost(postId).then(setPost).catch(() => {});
+  }, [postId]);
+
+  const submitReply = async () => {
+    if (!reply.trim()) return;
+    if (!requireLogin()) return;
+    setBusy(true);
+    try {
+      await api.replyToPost(postId, reply.trim());
+      const fresh = await api.getPost(postId);
+      setPost(fresh);
+      setReply('');
+    } catch (e) { alert(e.message); }
+    setBusy(false);
+  };
+
+  const reportPost = async () => {
+    if (!requireLogin()) return;
+    const reason = prompt('Why are you reporting this post? (optional)');
+    if (reason === null) return;
+    try {
+      await api.reportPost(postId, reason);
+      setReportSent(true);
+      setTimeout(onClose, 900);
+    } catch (e) { alert(e.message); }
+  };
+
+  if (!post) return null;
+  const a = post.authorId || {};
+  const handle = a.username ? `@${a.username}` : (a.displayName || 'Boater');
+
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 2000, background: 'rgba(31,42,38,0.5)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} className="sheet"
+        style={{ width: '100%', maxHeight: '88vh', display: 'flex', flexDirection: 'column', paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}>
+        <div className="sheet-handle" />
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 20px 0' }}>
+          {/* Original post */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+            <div onClick={() => navigate(`/profile/${a._id}`)} style={{ cursor: 'pointer' }}>
+              <Avatar name={a.displayName || a.username} src={a.profilePhotoUrl} size={40} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span onClick={() => navigate(`/profile/${a._id}`)} style={{ fontWeight: 600, fontSize: 14.5, cursor: 'pointer', color: 'var(--moss)' }}>{handle}</span>
+                {a.boatIndexNumber && <Plate>{a.boatIndexNumber}</Plate>}
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--silt)' }}>{timeAgo(post.createdAt)}</span>
+              </div>
+              <div style={{ fontSize: 15, color: 'var(--ink)', lineHeight: 1.45, marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{post.body}</div>
+              {post.tags?.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                  {post.tags.map(t => (
+                    <span key={t} style={{ fontSize: 12, color: 'var(--moss)', fontWeight: 600 }}>#{t}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Action row */}
+          <div style={{ display: 'flex', gap: 10, paddingBottom: 8, borderBottom: '1px solid var(--reed)' }}>
+            <button onClick={() => document.getElementById('reply-input')?.focus()} className="btn ghost" style={{ flex: 1, height: 36, fontSize: 13 }}>
+              <Icon name="send" size={14} /> Reply
+            </button>
+            <button onClick={reportPost} className="btn ghost" style={{ flex: 1, height: 36, fontSize: 13, color: 'var(--rust)' }}>
+              <Icon name="flag" size={14} color="var(--rust)" /> Report
+            </button>
+          </div>
+
+          {reportSent && (
+            <div style={{ padding: 12, marginTop: 10, background: 'var(--moss-soft)', borderRadius: 8, fontSize: 13, color: 'var(--moss)' }}>
+              Reported. Hidden pending review.
             </div>
           )}
+
+          {/* Replies */}
+          <div style={{ marginTop: 12, paddingBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--silt)', marginBottom: 8 }}>
+              {post.replies?.length || 0} repl{(post.replies?.length || 0) === 1 ? 'y' : 'ies'}
+            </div>
+            {(post.replies || []).map((r, i) => {
+              const ra = r.authorId || {};
+              const rhandle = ra.username ? `@${ra.username}` : (ra.displayName || 'Boater');
+              return (
+                <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 0', borderTop: i === 0 ? 0 : '1px solid var(--linen)' }}>
+                  <div onClick={() => ra._id && navigate(`/profile/${ra._id}`)} style={{ cursor: ra._id ? 'pointer' : 'default' }}>
+                    <Avatar name={ra.displayName || ra.username} src={ra.profilePhotoUrl} size={32} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span onClick={() => ra._id && navigate(`/profile/${ra._id}`)} style={{ fontWeight: 600, fontSize: 13.5, cursor: ra._id ? 'pointer' : 'default', color: 'var(--moss)' }}>{rhandle}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--silt)' }}>{timeAgo(r.createdAt)}</span>
+                    </div>
+                    <div style={{ fontSize: 14, marginTop: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.body}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Composer */}
+        <div style={{ display: 'flex', gap: 8, padding: '10px 20px', borderTop: '1px solid var(--reed)' }}>
+          <input id="reply-input" className="field" value={reply}
+            onChange={e => setReply(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') submitReply(); }}
+            placeholder={currentUser ? 'Write a reply…' : 'Sign in to reply'}
+            disabled={!currentUser}
+            style={{ flex: 1 }} />
+          <button onClick={submitReply} disabled={!reply.trim() || busy || !currentUser} className="btn primary" style={{ flexShrink: 0 }}>
+            <Icon name="send" size={16} color="var(--paper)" />
+          </button>
         </div>
       </div>
     </div>

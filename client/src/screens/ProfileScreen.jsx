@@ -21,6 +21,7 @@ export default function ProfileScreen() {
   const [listings, setListings] = useState([]);
   const [logbookCount, setLogbookCount] = useState(0);
   const [friends, setFriends] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -39,6 +40,11 @@ export default function ProfileScreen() {
         else if (res.entries) setLogbookCount(res.entries.length);
       }).catch(() => {});
     }
+
+    api.inbox({ unreadOnly: 'true' }).then(res => {
+      const list = Array.isArray(res) ? res : [];
+      setUnreadCount(list.length);
+    }).catch(() => {});
 
     // Fetch following/friends
     api.following(user._id).then(res => {
@@ -120,6 +126,29 @@ export default function ProfileScreen() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Messages quick link */}
+        <div style={{ padding: '0 20px 16px' }}>
+          <button onClick={() => nav('/messages')} className="row" style={{
+            cursor: 'pointer', width: '100%', padding: '14px 16px', gap: 12,
+            background: 'var(--paper)', border: '1px solid var(--reed)',
+            borderRadius: 'var(--r-lg)', alignItems: 'center', fontFamily: 'var(--font-sans)',
+          }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--moss-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon name="inbox" size={20} color="var(--moss)" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>Messages</div>
+              <div style={{ fontSize: 12.5, color: 'var(--silt)' }}>
+                {unreadCount > 0 ? `${unreadCount} unread message${unreadCount !== 1 ? 's' : ''}` : 'Direct messages and hails'}
+              </div>
+            </div>
+            {unreadCount > 0 && (
+              <span style={{ background: 'var(--moss)', color: 'var(--paper)', fontSize: 12, fontWeight: 700, borderRadius: 10, padding: '2px 8px', minWidth: 22, textAlign: 'center' }}>{unreadCount}</span>
+            )}
+            <Icon name="chevron" size={16} color="var(--pebble)" />
+          </button>
         </div>
 
         {/* Stats grid */}
