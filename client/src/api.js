@@ -79,7 +79,14 @@ export const api = {
   adminApproveCert: (boatId) => req(`/api/admin/certifications/${boatId}/approve`, { method: 'POST' }),
   adminRejectCert: (boatId, reason) => req(`/api/admin/certifications/${boatId}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
 
+  // Posts (chat feed)
+  listPosts: (params = {}) => req(`/api/posts?${new URLSearchParams(params)}`),
+  createPost: (body) => req('/api/posts', { method: 'POST', body: JSON.stringify(body) }),
+  deletePost: (id) => req(`/api/posts/${id}`, { method: 'DELETE' }),
+  trendingTags: () => req('/api/posts/_/tags/trending'),
+
   // Follows
+  getPublicProfile: (userId) => req(`/api/users/${userId}`),
   follow: (userId) => req(`/api/users/${userId}/follow`, { method: 'POST' }),
   unfollow: (userId) => req(`/api/users/${userId}/follow`, { method: 'DELETE' }),
   following: (userId) => req(`/api/users/${userId}/following`),

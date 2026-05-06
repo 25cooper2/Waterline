@@ -5,6 +5,20 @@ import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Public profile (safe fields only)
+router.get('/:userId', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId)
+      .select('displayName username profilePhotoUrl bio boatId boatName boatIndexNumber boatType isVerified createdAt');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const followerCount = await Follow.countDocuments({ followingId: user._id });
+    const followingCount = await Follow.countDocuments({ followerId: user._id });
+    res.json({ ...user.toObject(), followerCount, followingCount });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Follow user
 router.post('/:userId/follow', authMiddleware, async (req, res) => {
   try {

@@ -1,0 +1,135 @@
+import express from 'express';
+import Post from '../models/Post.js';
+import Follow from '../models/Follow.js';
+import { authMiddleware } from '../middleware/auth.js';
+
+const router = express.Router();
+
+// Haversine miles
+function milesBetween(lat1, lng1, lat2, lng2) {
+  const R = 3958.8;
+  const toRad = d => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+const parseTags = (raw) => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(t => String(t).toLowerCase().trim()).filter(Boolean).slice(0, 8);
+  return String(raw)
+    .split(/[,\s#]+/)
+    .map(t => t.toLowerCase().trim())
+    .filter(Boolean)
+    .slice(0, 8);
+};
+
+// Create post
+router.post('/', authMiddleware, async (req, res) => {
+  try {
+    const { body, tags, lat, lng, locationName, photos } = req.body;
+    if (!body || !body.trim()) return res.status(400).json({ error: 'Post body required' });
+
+    const post = new Post({
+      authorId: req.user.userId,
+      body: body.trim(),
+      tags: parseTags(tags),
+      lat: lat ?? null,
+      lng: lng ?? null,
+      locationName: locationName || null,
+      photos: Array.isArray(photos) ? photos.slice(0, 3) : [],
+    });
+    await post.save();
+    await post.populate('authorId', 'displayName username profilePhotoUrl boatIndexNumber boatName');
+    res.status(201).json(post);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// List posts. Query: lat, lng, radius (miles), tag, q (text), followingOnly, authorId, limit
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const { lat, lng, radius, tag, q, followingOnly, authorId, limit } = req.query;
+    const filter = {};
+
+    if (tag) filter.tags = String(tag).toLowerCase().trim();
+    if (authorId) filter.authorId = authorId;
+    if (q) filter.$or = [
+      { body: { $regex: q, $options: 'i' } },
+      { tags: { $regex: q.replace(/^#/, '').toLowerCase(), $options: 'i' } },
+    ];
+
+    if (followingOnly === 'true') {
+      const follows = await Follow.find({ followerId: req.user.userId }).select('followingId');
+      const ids = follows.map(f => f.followingId);
+      ids.push(req.user.userId);
+      filter.authorId = { $in: ids };
+    }
+
+    let posts = await Post.find(filter)
+      .populate('authorId', 'displayName username profilePhotoUrl boatIndexNumber boatName')
+      .sort({ createdAt: -1 })
+      .limit(Math.min(parseInt(limit) || 100, 200))
+      .exec();
+
+    if (lat && lng && radius) {
+      const lat0 = parseFloat(lat), lng0 = parseFloat(lng), r = parseFloat(radius);
+      posts = posts.filter(p => {
+        if (p.lat == null || p.lng == null) return false;
+        return milesBetween(lat0, lng0, p.lat, p.lng) <= r;
+      });
+    }
+    res.json(posts);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Single post
+router.get('/:postId', async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.postId)
+      .populate('authorId', 'displayName username profilePhotoUrl boatIndexNumber boatName');
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    res.json(post);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Trending tags (top 20 in last 30 days)
+router.get('/_/tags/trending', async (req, res) => {
+  try {
+    const since = new Date(Date.now() - 30 * 86400000);
+    const result = await Post.aggregate([
+      { $match: { createdAt: { $gte: since } } },
+      { $unwind: '$tags' },
+      { $group: { _id: '$tags', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 20 },
+    ]);
+    res.json(result.map(r => ({ tag: r._id, count: r.count })));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Delete (author only)
+router.delete('/:postId', authMiddleware, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.postId);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (post.authorId.toString() !== req.user.userId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    await Post.deleteOne({ _id: post._id });
+    res.json({ message: 'Post deleted' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+export default router;
