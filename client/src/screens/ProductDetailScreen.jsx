@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getCachedLocation, saveDeviceLocation } from '../utils/deviceLocation';
 import { api } from '../api';
@@ -25,6 +25,7 @@ export default function ProductDetailScreen() {
   const [error, setError] = useState('');
   const [userLoc, setUserLoc] = useState(() => getCachedLocation());
   const [imgIndex, setImgIndex] = useState(0);
+  const viewRecordedRef = useRef(false); // prevent double-recording on strict mode mount
 
   useEffect(() => {
     (async () => {
@@ -51,6 +52,14 @@ export default function ProductDetailScreen() {
       );
     }
   }, []);
+
+  // Record a unique view (deduplicated by IP+userAgent server-side)
+  useEffect(() => {
+    if (product && !viewRecordedRef.current) {
+      viewRecordedRef.current = true;
+      api.recordProductView(id).catch(() => {});
+    }
+  }, [product, id]);
 
   const toggleFav = async () => {
     if (!user) return;
@@ -192,6 +201,11 @@ export default function ProductDetailScreen() {
                 {mi < 0.1 ? '< 0.1 mi away' : `${mi.toFixed(1)} mi away`}
               </span>;
             })()}
+            {product.viewers && product.viewers.length > 0 && (
+              <span className="chip pebble" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>
+                <Icon name="eye" size={12} color="var(--pebble)" /> {product.viewers.length} viewer{product.viewers.length !== 1 ? 's' : ''}
+              </span>
+            )}
           </div>
 
           {/* Description */}

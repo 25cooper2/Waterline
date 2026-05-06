@@ -14,7 +14,13 @@ const productSchema = new mongoose.Schema({
   lng: { type: Number, default: null },
   boatIndexNumber: { type: String, default: null },
   isAvailable: { type: Boolean, default: true },
-  views: { type: Number, default: 0 },
+  // Unique viewer tracking: dedup by IP + userAgent to count devices, not clicks
+  viewers: [{
+    ip: String,
+    userAgent: String,
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    viewedAt: { type: Date, default: Date.now },
+  }],
   favorites: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', default: [] }],
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

@@ -212,4 +212,29 @@ router.delete('/:productId/favorite', authMiddleware, async (req, res) => {
   }
 });
 
+// Record a unique viewer (deduped by IP + userAgent to count devices, not clicks)
+router.post('/:productId/view', async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.productId);
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    const ip = req.ip || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const userId = req.user?.userId || null;
+
+    // Check if this device already viewed; if not, add it
+    const existingViewer = product.viewers.find(
+      v => v.ip === ip && v.userAgent === userAgent
+    );
+    if (!existingViewer) {
+      product.viewers.push({ ip, userAgent, userId, viewedAt: new Date() });
+      await product.save();
+    }
+
+    res.json({ uniqueViewers: product.viewers.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
