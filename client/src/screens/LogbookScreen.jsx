@@ -478,7 +478,9 @@ export default function LogbookScreen() {
 
               {timelineItems.map((item, idx) => {
                 if (item.type === 'segment') {
-                  // Canal-routed segment between two entries: show miles + locks
+                  // Canal-routed segment between two entries: show miles + locks.
+                  // If there's a multi-day gap with no entry filling it, also
+                  // surface an "Add missing" button that pre-fills the gap dates.
                   const parts = [];
                   if (item.miles != null) parts.push(`${item.miles} mi`);
                   if (item.locks != null && item.locks > 0) parts.push(`${item.locks} lock${item.locks !== 1 ? 's' : ''}`);
@@ -493,6 +495,20 @@ export default function LogbookScreen() {
                         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--silt)' }}>
                           {parts.join(' · ') || 'Travelled'}
                         </span>
+                        {item.days && item.days > 1 && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openNewForGap(item.afterIndex); }}
+                            style={{
+                              background: 'none', border: '1px solid var(--reed)',
+                              borderRadius: 14, padding: '2px 10px', cursor: 'pointer',
+                              fontSize: 11, fontWeight: 600, color: 'var(--silt)',
+                              fontFamily: 'var(--font-sans)', display: 'inline-flex',
+                              alignItems: 'center', gap: 4, marginLeft: 4,
+                            }}
+                          >
+                            <Icon name="plus" size={11} color="var(--silt)" /> Add missing
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

@@ -123,15 +123,14 @@ function makeLogbookPinIcon() {
   });
 }
 
-// Draggable midpoint handle for rerouting journey segments
+// Draggable midpoint handle for rerouting journey segments — orange so it
+// reads as an interactive control distinct from the white logbook pins.
 function makeWaypointHandleIcon() {
   return L.divIcon({
-    html: `<div style="width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,0.97);border:2.5px solid #111;box-shadow:0 1px 6px rgba(0,0,0,0.45);cursor:grab;display:flex;align-items:center;justify-content:center">
-      <div style="width:5px;height:5px;border-radius:50%;background:#111;opacity:0.45"></div>
-    </div>`,
+    html: `<div style="width:22px;height:22px;border-radius:50%;background:#E89C2C;border:3px solid #111;box-shadow:0 2px 8px rgba(0,0,0,0.5);cursor:grab"></div>`,
     className: 'journey-wp-handle',
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
   });
 }
 
@@ -295,6 +294,8 @@ export default function MapScreen() {
   // Canal-routing state: one entry per segment between consecutive logbook entries
   const [journeyRoutes, setJourneyRoutes] = useState([]); // [[lat,lng][]|null, …]
   const [journeyWaypoints, setJourneyWaypoints] = useState({}); // segIdx → {lat,lng}
+  const [editJourney, setEditJourney] = useState(false); // shows orange waypoint handles
+  const [routingLoading, setRoutingLoading] = useState(false); // "Computing route…" toast
   const journeyWaypointsRef = useRef({}); // kept in sync; safe to read inside async callbacks
   const routesCacheRef = useRef({}); // entryId → { coords, fromId } in-session cache
   const canalFeaturesRef = useRef([]); // mirrored ref so async lock-counting reads latest
@@ -360,28 +361,43 @@ export default function MapScreen() {
     );
     const segments = sorted.slice(0, -1).map((from, i) => ({ from, to: sorted[i + 1], i }));
 
-    // Resolve what we already have right now
+    // A cached route is only valid if its endpoints are still close to the
+    // current entry coords — protects against the user editing a pin's
+    // location after the route was first computed.
+    const endpointsMatch = (route, from, to) => {
+      if (!Array.isArray(route) || route.length < 2) return false;
+      const a = route[0], b = route[route.length - 1];
+      return hav(a[0], a[1], from.lat, from.lng) < 250 &&
+             hav(b[0], b[1], to.lat, to.lng) < 250;
+    };
+
     const initial = segments.map(({ from, to, i }) => {
       const session = routesCacheRef.current[to._id];
-      if (session && session.fromId === from._id) return session.coords;
+      if (session && session.fromId === from._id && endpointsMatch(session.coords, from, to)) return session.coords;
       if (
         Array.isArray(to.routeCoords) && to.routeCoords.length > 1 &&
         String(to.routeFromEntry) === String(from._id) &&
-        !journeyWaypointsRef.current[i]
+        !journeyWaypointsRef.current[i] &&
+        endpointsMatch(to.routeCoords, from, to)
       ) return to.routeCoords;
       return null;
     });
     setJourneyRoutes(initial);
 
-    // Compute the rest in the background
-    segments.forEach(async ({ from, to, i }) => {
-      if (initial[i]) return;
+    const missing = segments.filter((_, i) => !initial[i]);
+    if (missing.length === 0) return () => { cancelled = true; };
+
+    setRoutingLoading(true);
+    let pending = missing.length;
+    missing.forEach(async ({ from, to, i }) => {
       const via = journeyWaypointsRef.current[i] || null;
       const route = await routeAlongWaterway(from.lat, from.lng, to.lat, to.lng, via).catch(() => null);
-      if (cancelled || !route) return;
-      routesCacheRef.current[to._id] = { coords: route, fromId: from._id };
-      setJourneyRoutes(prev => { const next = [...prev]; next[i] = route; return next; });
-      saveSegment(to._id, from._id, route, via);
+      if (!cancelled && route) {
+        routesCacheRef.current[to._id] = { coords: route, fromId: from._id };
+        setJourneyRoutes(prev => { const next = [...prev]; next[i] = route; return next; });
+        saveSegment(to._id, from._id, route, via);
+      }
+      if (--pending === 0 && !cancelled) setRoutingLoading(false);
     });
 
     return () => { cancelled = true; };
@@ -394,6 +410,7 @@ export default function MapScreen() {
     );
     if (segIdx >= sorted.length - 1) return;
     const from = sorted[segIdx], to = sorted[segIdx + 1];
+    setRoutingLoading(true);
     routeAlongWaterway(from.lat, from.lng, to.lat, to.lng, via)
       .then(route => {
         if (!route) return;
@@ -401,7 +418,8 @@ export default function MapScreen() {
         setJourneyRoutes(prev => { const next = [...prev]; next[segIdx] = route; return next; });
         saveSegment(to._id, from._id, route, via);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setRoutingLoading(false));
   };
 
   // Latest entry without an end date = "moored here" — the round profile pin
@@ -766,8 +784,8 @@ out center geom qt;`;
           });
         })()}
 
-        {/* Draggable midpoint handles — lets user drag to select an alternate canal route */}
-        {filters.logbook && journeyRoutes.map((route, i) => {
+        {/* Draggable midpoint handles — only visible in journey-edit mode */}
+        {filters.logbook && editJourney && journeyRoutes.map((route, i) => {
           if (!route || route.length < 3) return null;
           const midIdx = Math.floor(route.length / 2);
           const [midLat, midLng] = route[midIdx];
@@ -870,6 +888,35 @@ out center geom qt;`;
           <FilterChip active={filters.friends} onClick={() => toggleFilter('friends')}><Icon name="friend" size={13} stroke={2} /> Friends</FilterChip>
           <FilterChip active={filters.services} onClick={() => toggleFilter('services')}><Icon name="fuel" size={13} stroke={2} /> Services</FilterChip>
           <FilterChip active={filters.logbook} onClick={() => toggleFilter('logbook')}>Logbook</FilterChip>
+          {filters.logbook && (
+            <FilterChip active={editJourney} onClick={() => setEditJourney(v => !v)}>
+              {editJourney ? '✓ Done' : '✎ Edit route'}
+            </FilterChip>
+          )}
+        </div>
+      )}
+
+      {/* Edit-mode hint banner */}
+      {!locationPickMode && filters.logbook && editJourney && (
+        <div style={{
+          position: 'absolute', top: 110, left: 12, right: 12, zIndex: 1000,
+          background: 'var(--ink)', color: 'var(--paper)', borderRadius: 10,
+          padding: '10px 14px', fontSize: 13, fontWeight: 500,
+          textAlign: 'center', boxShadow: 'var(--sh-2)',
+        }}>
+          Drag any orange dot along the canal to choose a different route. Tap <strong>Done</strong> when finished.
+        </div>
+      )}
+
+      {/* Routing-loading toast */}
+      {routingLoading && (
+        <div style={{
+          position: 'absolute', top: 110, left: '50%', transform: 'translateX(-50%)', zIndex: 1001,
+          background: 'rgba(20,20,20,0.85)', color: '#fff', borderRadius: 22,
+          padding: '8px 16px', fontSize: 13, fontWeight: 500, boxShadow: 'var(--sh-2)',
+          display: 'flex', alignItems: 'center',
+        }}>
+          <span className="wl-spinner" /> Computing route…
         </div>
       )}
 
