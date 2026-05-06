@@ -14,6 +14,7 @@ import LogbookScreen from './screens/LogbookScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import SettingsBoatsScreen from './screens/SettingsBoatsScreen';
+import ProfileIdentityScreen from './screens/ProfileIdentityScreen';
 import SettingsPrivacyScreen from './screens/SettingsPrivacyScreen';
 import FriendsScreen from './screens/FriendsScreen';
 import TradeSetupScreen from './screens/TradeSetupScreen';
@@ -69,6 +70,7 @@ export default function App() {
       <Route path="/report-hazard" element={<ReportHazardScreen />} />
       <Route path="/settings" element={<SettingsScreen />} />
       <Route path="/settings/boats" element={<SettingsBoatsScreen />} />
+      <Route path="/settings/profile" element={<ProfileIdentityScreen />} />
       <Route path="/settings/privacy" element={<SettingsPrivacyScreen />} />
       <Route path="/friends" element={<FriendsScreen />} />
       <Route path="/trade-setup" element={<TradeSetupScreen />} />

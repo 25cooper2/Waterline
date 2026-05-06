@@ -22,15 +22,16 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const data = await api.login({ email, password });
     localStorage.setItem('wl_token', data.token);
-    setUser(data.user);
-    return data.user;
+    // Fetch /me to populate boat info (login response only returns base user)
+    try { const full = await api.me(); setUser(full); return full; }
+    catch { setUser(data.user); return data.user; }
   };
 
   const register = async (email, password, displayName) => {
     const data = await api.register({ email, password, displayName });
     localStorage.setItem('wl_token', data.token);
-    setUser(data.user);
-    return data.user;
+    try { const full = await api.me(); setUser(full); return full; }
+    catch { setUser(data.user); return data.user; }
   };
 
   const logout = () => {

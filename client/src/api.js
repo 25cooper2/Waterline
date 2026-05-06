@@ -20,6 +20,7 @@ export const api = {
   register: (body) => req('/api/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   login: (body) => req('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   me: () => req('/api/auth/me'),
+  updateMe: (body) => req('/api/auth/me', { method: 'PUT', body: JSON.stringify(body) }),
 
   // Boats
   createBoat: (body) => req('/api/boats', { method: 'POST', body: JSON.stringify(body) }),

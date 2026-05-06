@@ -100,4 +100,24 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
+// Update current user profile (displayName, username, bio, profilePhotoUrl, avatarColor)
+router.put('/me', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const { displayName, username, bio, profilePhotoUrl, avatarColor } = req.body;
+    if (displayName !== undefined) user.displayName = displayName;
+    if (username !== undefined) user.username = username || null;
+    if (bio !== undefined) user.bio = bio;
+    if (profilePhotoUrl !== undefined) user.profilePhotoUrl = profilePhotoUrl;
+    if (avatarColor !== undefined) user.avatarColor = avatarColor;
+    user.updatedAt = new Date();
+    await user.save();
+    res.json(user.toJSON());
+  } catch (error) {
+    if (error.code === 11000) return res.status(400).json({ error: 'Username already taken' });
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

@@ -45,7 +45,7 @@ export default function SettingsScreen() {
         <div style={{ padding: '20px 20px 0' }}>
           <div className="label" style={{ marginBottom: 10 }}>Account</div>
           <div className="card">
-            <SettingsRow icon="me" label="Profile & identity" onClick={() => {}} />
+            <SettingsRow icon="me" label="Profile & identity" onClick={() => nav('/settings/profile')} />
             <SettingsRow icon="boat" label="Boats & verification" meta={user?.boatId ? '1 boat' : '0 boats'} onClick={() => nav('/settings/boats')} />
             <SettingsRow icon="wrench" label="My services" meta="Trade off" onClick={() => {}} />
             <SettingsRow icon="shield" label="Privacy & visibility" onClick={() => nav('/settings/privacy')} />
