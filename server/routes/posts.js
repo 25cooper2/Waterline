@@ -18,12 +18,9 @@ function milesBetween(lat1, lng1, lat2, lng2) {
 
 const parseTags = (raw) => {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw.map(t => String(t).toLowerCase().trim()).filter(Boolean).slice(0, 8);
-  return String(raw)
-    .split(/[,\s#]+/)
-    .map(t => t.toLowerCase().trim())
-    .filter(Boolean)
-    .slice(0, 8);
+  const norm = (t) => String(t).replace(/^#/, '').toLowerCase().trim();
+  if (Array.isArray(raw)) return raw.map(norm).filter(Boolean).slice(0, 8);
+  return String(raw).split(',').map(norm).filter(Boolean).slice(0, 8);
 };
 
 // Create post

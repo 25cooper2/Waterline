@@ -90,6 +90,7 @@ export const api = {
   reportPost: (id, reason) => req(`/api/posts/${id}/report`, { method: 'POST', body: JSON.stringify({ reason }) }),
 
   // Follows
+  searchUsers: (q) => req(`/api/users/_search?q=${encodeURIComponent(q)}`),
   getPublicProfile: (userId) => req(`/api/users/${userId}`),
   follow: (userId) => req(`/api/users/${userId}/follow`, { method: 'POST' }),
   unfollow: (userId) => req(`/api/users/${userId}/follow`, { method: 'DELETE' }),
