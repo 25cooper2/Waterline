@@ -39,6 +39,8 @@ export default function Icon({ name, size = 22, stroke = 1.6, color = 'currentCo
       return <svg viewBox="0 0 24 24" {...s}><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6l8-3z" /></svg>;
     case 'compass':
       return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><path d="M15 9l-2 6-4 0 2-6 4 0z" /></svg>;
+    case 'locate':
+      return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg>;
     case 'boat':
       return <svg viewBox="0 0 24 24" {...s}><path d="M3 17c2 1 3 1 5 0s3-1 5 0 3 1 5 0 3-1 5 0" /><path d="M5 14h14l-2-4H7l-2 4z" /><path d="M12 10V4l5 6" /></svg>;
     case 'fuel':

@@ -195,6 +195,11 @@ function MapViewTracker({ onViewChange, onCenterChange, onZoomChange }) {
   return null;
 }
 
+function MapClickCatcher({ onClick }) {
+  useMapEvents({ click: () => onClick?.() });
+  return null;
+}
+
 function FlyTo({ center, zoom }) {
   const map = useMap();
   useEffect(() => { if (center) map.flyTo(center, zoom || 14, { duration: 1.2 }); }, [center]);
@@ -739,6 +744,7 @@ out center geom qt;`;
           maxZoom={19}
         />
         <MapViewTracker onViewChange={setBboxKey} onCenterChange={setMapCenter} onZoomChange={setMapZoom} />
+        <MapClickCatcher onClick={() => setCanalPanelOpen(false)} />
         <FlyTo center={flyTarget} />
 
         {/* Waterway lines — rendered first so they sit behind all markers */}
@@ -940,7 +946,7 @@ out center geom qt;`;
       {/* Controls (right side) — compass + edit route in a row */}
       {!locationPickMode && (
         <div style={{ position: 'absolute', right: 12, top: 120, zIndex: 1000, display: 'flex', gap: 6 }}>
-          <CtrlBtn onClick={goToMyLocation}><Icon name="compass" size={20} color="var(--moss)" stroke={1.8} /></CtrlBtn>
+          <CtrlBtn onClick={goToMyLocation}><Icon name="locate" size={20} color="var(--moss)" stroke={2} /></CtrlBtn>
           {filters.logbook && (
             <button
               onClick={() => setEditJourney(v => !v)}
@@ -1132,8 +1138,8 @@ function HazardSheet({ pin, onClose }) {
         </button>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+        <button onClick={onClose} className="btn ghost" style={{ flex: 1 }}>Close</button>
         <button onClick={() => navigate(`/hazard/${pin._id}`, { state: { hazard: pin } })} className="btn primary" style={{ flex: 1 }}>View details</button>
-        <button className="btn ghost"><Icon name="check" size={18} /> Confirm</button>
       </div>
     </div>
   );
