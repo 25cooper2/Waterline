@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
@@ -23,6 +23,7 @@ export default function ProductDetailScreen() {
   const [liked, setLiked] = useState(false);
   const [error, setError] = useState('');
   const [userLoc, setUserLoc] = useState(null);
+  const [imgIndex, setImgIndex] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -87,20 +88,24 @@ export default function ProductDetailScreen() {
 
   const seller = product.sellerId || {};
   const condition = product.condition?.replace('_', ' ') || 'Good';
+  const isOwner = user && seller._id === user._id;
+  const images = product.images || [];
+  const currentImg = images[imgIndex];
 
   return (
     <div className="screen">
       <div className="scroll">
         {/* Full-bleed image area */}
         <div style={{
-          position: 'relative', height: 320, background: 'var(--linen)',
+          position: 'relative', height: 320,
+          background: currentImg ? `url(${currentImg}) center/cover no-repeat` : 'var(--linen)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Icon name="market" size={56} color="var(--pebble)" />
+          {!currentImg && <Icon name="market" size={56} color="var(--pebble)" />}
 
           {/* Floating back button */}
           <button
-            onClick={() => nav('/market')}
+            onClick={() => nav(-1)}
             style={{
               position: 'absolute', top: 16, left: 16,
               width: 40, height: 40, borderRadius: '50%',
@@ -113,18 +118,37 @@ export default function ProductDetailScreen() {
           </button>
 
           {/* Floating heart button */}
-          <button
-            onClick={toggleFav}
-            style={{
-              position: 'absolute', top: 16, right: 16,
-              width: 40, height: 40, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.9)', border: 'none',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: 'var(--sh-1)',
-            }}
-          >
-            <Icon name="heart" size={20} color={liked ? 'var(--rust)' : 'var(--silt)'} />
-          </button>
+          {!isOwner && (
+            <button
+              onClick={toggleFav}
+              style={{
+                position: 'absolute', top: 16, right: 16,
+                width: 40, height: 40, borderRadius: '50%',
+                background: 'rgba(255,255,255,0.9)', border: 'none',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: 'var(--sh-1)',
+              }}
+            >
+              <Icon name="heart" size={20} color={liked ? 'var(--rust)' : 'var(--silt)'} />
+            </button>
+          )}
+
+          {/* Image dots */}
+          {images.length > 1 && (
+            <div style={{
+              position: 'absolute', bottom: 12, left: 0, right: 0,
+              display: 'flex', justifyContent: 'center', gap: 6,
+            }}>
+              {images.map((_, i) => (
+                <div key={i} onClick={() => setImgIndex(i)} style={{
+                  width: i === imgIndex ? 18 : 6, height: 6,
+                  borderRadius: 3, cursor: 'pointer',
+                  background: i === imgIndex ? '#fff' : 'rgba(255,255,255,0.5)',
+                  transition: 'width 0.2s',
+                }} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -151,20 +175,14 @@ export default function ProductDetailScreen() {
             <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px', textTransform: 'capitalize' }}>
               {condition}
             </span>
-            {(() => {
-              if (user && product.sellerId?._id === user._id) {
-                return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>Your listing</span>;
-              }
-              if (userLoc && product.lat && product.lng) {
-                const mi = distanceMi(userLoc.lat, userLoc.lng, product.lat, product.lng);
-                return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>
-                  {mi < 0.1 ? 'Here' : `${mi.toFixed(1)} mi away`}
-                </span>;
-              }
-              if (!userLoc) {
-                return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px', color: 'var(--silt)' }}>Enable location for distance</span>;
-              }
-              return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px', color: 'var(--silt)' }}>No pickup location set</span>;
+            {isOwner && (
+              <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>Your listing</span>
+            )}
+            {!isOwner && userLoc && product.lat && product.lng && (() => {
+              const mi = distanceMi(userLoc.lat, userLoc.lng, product.lat, product.lng);
+              return <span className="chip" style={{ height: 26, fontSize: 12, padding: '0 10px' }}>
+                {mi < 0.1 ? 'Here' : `${mi.toFixed(1)} mi away`}
+              </span>;
             })()}
           </div>
 
@@ -222,25 +240,31 @@ export default function ProductDetailScreen() {
         background: 'var(--paper)', borderTop: '1px solid var(--reed)',
         display: 'flex', gap: 12, alignItems: 'center',
       }}>
-        <button
-          onClick={toggleFav}
-          style={{
-            width: 52, height: 52, borderRadius: 'var(--r-md)',
-            border: '1px solid var(--reed)', background: 'var(--paper-2)',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-          }}
-        >
-          <Icon name="heart" size={22} color={liked ? 'var(--rust)' : 'var(--silt)'} />
-        </button>
-        <button
-          className="btn primary block"
-          onClick={() => {
-            if (seller._id) nav(`/inbox?to=${seller._id}`);
-          }}
-        >
-          Message seller
-        </button>
+        {isOwner ? (
+          <button className="btn primary block" onClick={() => nav(`/market/edit/${id}`)}>
+            Edit listing
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={toggleFav}
+              style={{
+                width: 52, height: 52, borderRadius: 'var(--r-md)',
+                border: '1px solid var(--reed)', background: 'var(--paper-2)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="heart" size={22} color={liked ? 'var(--rust)' : 'var(--silt)'} />
+            </button>
+            <button
+              className="btn primary block"
+              onClick={() => { if (seller._id) nav(`/inbox?to=${seller._id}`); }}
+            >
+              Message seller
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

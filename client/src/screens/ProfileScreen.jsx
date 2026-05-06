@@ -238,7 +238,7 @@ export default function ProfileScreen() {
                   key={item._id || i}
                   className="row"
                   style={{ cursor: 'pointer', gap: 12, padding: '12px 16px' }}
-                  onClick={() => nav(`/market/${item._id}`)}
+                  onClick={() => nav(item.listingType === 'service' ? `/market/service/${item._id}` : `/market/edit/${item._id}`)}
                 >
                   {/* Image placeholder */}
                   <div style={{

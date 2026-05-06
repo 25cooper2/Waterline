@@ -219,13 +219,15 @@ export default function MarketScreen() {
 }
 
 function ProductCard({ product, onClick, distance }) {
+  const img = product.images?.[0];
   return (
     <div className="card" style={{ cursor: 'pointer' }} onClick={onClick}>
       <div style={{
-        background: 'var(--linen)', height: 130,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: 130, overflow: 'hidden', borderRadius: 'var(--r-md) var(--r-md) 0 0',
+        background: img ? `url(${img}) center/cover no-repeat` : 'var(--linen)',
+        display: img ? 'block' : 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <Icon name="market" size={36} color="var(--pebble)" />
+        {!img && <Icon name="market" size={36} color="var(--pebble)" />}
       </div>
       <div style={{ padding: '10px 12px 12px' }}>
         <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.3, marginBottom: 6 }} className="truncate">

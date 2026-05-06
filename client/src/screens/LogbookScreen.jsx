@@ -409,6 +409,25 @@ export default function LogbookScreen() {
           </div>
         ) : (
           <>
+            {/* Warning: no open mooring entry */}
+            {currentIndex === -1 && entries.length > 0 && (
+              <div
+                onClick={() => { setEditingEntry(null); setForm(blankForm); setShowNew(true); }}
+                style={{
+                  margin: '12px 20px 0', padding: '12px 14px',
+                  background: 'var(--rust-soft, #fff3f0)', border: '1px solid var(--rust, #c0392b)',
+                  borderRadius: 'var(--r-md)', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+                }}
+              >
+                <Icon name="pin" size={18} color="var(--rust, #c0392b)" />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--rust, #c0392b)' }}>No current mooring logged</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink)', marginTop: 2 }}>Tap to add where you are now — needed for the map pin and listings.</div>
+                </div>
+                <Icon name="plus" size={16} color="var(--rust, #c0392b)" />
+              </div>
+            )}
+
             <div style={styles.statsRow}>
               <div style={styles.statCard}>
                 <div style={styles.statLabel}>This year miles</div>

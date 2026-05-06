@@ -97,7 +97,7 @@ router.put('/:productId', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    const { title, description, category, price, condition, isAvailable, boatIndexNumber } = req.body;
+    const { title, description, category, price, condition, isAvailable, boatIndexNumber, images, lat, lng, listingType } = req.body;
     if (title) product.title = title;
     if (description) product.description = description;
     if (category) product.category = category;
@@ -105,6 +105,10 @@ router.put('/:productId', authMiddleware, async (req, res) => {
     if (condition) product.condition = condition;
     if (isAvailable !== undefined) product.isAvailable = isAvailable;
     if (boatIndexNumber) product.boatIndexNumber = boatIndexNumber;
+    if (Array.isArray(images)) product.images = images;
+    if (lat !== undefined) product.lat = lat;
+    if (lng !== undefined) product.lng = lng;
+    if (listingType) product.listingType = listingType;
     product.updatedAt = new Date();
 
     await product.save();

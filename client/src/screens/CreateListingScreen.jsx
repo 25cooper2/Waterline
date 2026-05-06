@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { compressMany } from '../utils/imageCompress';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
@@ -40,6 +40,7 @@ const CONDITIONS = [
 
 export default function CreateListingScreen() {
   const nav = useNavigate();
+  const { id: editId } = useParams(); // present when editing an existing listing
   const { user } = useAuth();
   const isTrader = user?.isTrader || false;
 
@@ -56,11 +57,67 @@ export default function CreateListingScreen() {
     category: 'engines',
     description: '',
   });
-  const [pickup, setPickup] = useState('boat');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [photos, setPhotos] = useState([]); // base64 data URLs
   const fileInputRef = useRef(null);
+
+  // Location state
+  const [pickedLat, setPickedLat] = useState(null);
+  const [pickedLng, setPickedLng] = useState(null);
+  const [pickedLabel, setPickedLabel] = useState('');
+  const [boatMooring, setBoatMooring] = useState(null); // { lat, lng } from latest open logbook entry
+
+  // Nominatim search
+  const [geoQuery, setGeoQuery] = useState('');
+  const [geoResults, setGeoResults] = useState([]);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const geoTimer = useRef(null);
+
+  // Load current mooring from logbook on mount
+  useEffect(() => {
+    if (!user?.boatId) return;
+    api.getLogbook(user.boatId, { limit: 20 }).then(entries => {
+      const open = Array.isArray(entries) ? entries.find(e => !e.endDate && !e.left) : null;
+      if (open?.lat && open?.lng) setBoatMooring({ lat: open.lat, lng: open.lng, label: open.location });
+    }).catch(() => {});
+  }, [user?.boatId]);
+
+  // Load existing listing when editing
+  useEffect(() => {
+    if (!editId) return;
+    api.getProduct(editId).then(p => {
+      setListingType(p.listingType || 'thing');
+      setForm({
+        title: p.title || '',
+        price: p.price != null ? String(p.price) : '',
+        condition: p.condition || 'good',
+        category: p.category || 'engines',
+        description: p.description || '',
+      });
+      setPhotos(p.images || []);
+      if (p.lat && p.lng) {
+        setPickedLat(p.lat);
+        setPickedLng(p.lng);
+        setPickedLabel(p.location || `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`);
+      }
+    }).catch(() => {});
+  }, [editId]);
+
+  const searchGeo = useCallback((q) => {
+    clearTimeout(geoTimer.current);
+    if (!q.trim()) { setGeoResults([]); return; }
+    geoTimer.current = setTimeout(async () => {
+      setGeoLoading(true);
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=gb&limit=5&q=${encodeURIComponent(q)}`;
+        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        const data = await res.json();
+        setGeoResults(data);
+      } catch {}
+      setGeoLoading(false);
+    }, 400);
+  }, []);
 
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -84,24 +141,19 @@ export default function CreateListingScreen() {
     setSubmitting(true);
     setError('');
     try {
-      // Try to capture current location so distance works for buyers
-      let lat = null, lng = null;
-      if (navigator.geolocation) {
-        try {
-          const pos = await new Promise((res, rej) =>
-            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 4000, enableHighAccuracy: false })
-          );
-          lat = pos.coords.latitude;
-          lng = pos.coords.longitude;
-        } catch {}
-      }
-      await api.createProduct({
+      const body = {
         ...form,
         price: parseFloat(form.price) || 0,
         listingType,
         images: photos,
-        lat, lng,
-      });
+        lat: pickedLat,
+        lng: pickedLng,
+      };
+      if (editId) {
+        await api.updateProduct(editId, body);
+      } else {
+        await api.createProduct(body);
+      }
       nav('/market');
     } catch (e) {
       setError(e.message);
@@ -115,7 +167,7 @@ export default function CreateListingScreen() {
         <button onClick={() => nav('/market')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
           <Icon name="back" size={24} />
         </button>
-        <h1>New listing</h1>
+        <h1>{editId ? 'Edit listing' : 'New listing'}</h1>
         <div style={{ width: 24 }} />
       </div>
 
@@ -199,59 +251,117 @@ export default function CreateListingScreen() {
           </select>
         </div>
 
+        {/* Location */}
+        {listingType !== 'service' && (
+          <div style={{ marginBottom: 16 }}>
+            <div className="label">Location</div>
+
+            {/* Current mooring button */}
+            <div
+              className="card"
+              onClick={() => {
+                if (!boatMooring) return;
+                setPickedLat(boatMooring.lat);
+                setPickedLng(boatMooring.lng);
+                setPickedLabel(boatMooring.label || 'Current mooring');
+                setGeoQuery('');
+                setGeoResults([]);
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 14,
+                padding: '14px 16px', cursor: boatMooring ? 'pointer' : 'default',
+                marginBottom: 10,
+                borderColor: pickedLat && pickedLabel === (boatMooring?.label || 'Current mooring') ? 'var(--moss)' : undefined,
+                boxShadow: pickedLat && pickedLabel === (boatMooring?.label || 'Current mooring') ? '0 0 0 2px var(--moss-soft)' : undefined,
+                opacity: boatMooring ? 1 : 0.5,
+              }}
+            >
+              <Icon name="boat" size={20} color={boatMooring ? 'var(--moss)' : 'var(--pebble)'} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>Use my boat's live location</div>
+                {boatMooring
+                  ? <div style={{ fontSize: 12, color: 'var(--pebble)', marginTop: 2 }}>{boatMooring.label || `${boatMooring.lat.toFixed(4)}, ${boatMooring.lng.toFixed(4)}`}</div>
+                  : <div style={{ fontSize: 12, color: 'var(--pebble)', marginTop: 2 }}>No open mooring found in logbook</div>
+                }
+              </div>
+              {pickedLat && pickedLabel === (boatMooring?.label || 'Current mooring') && (
+                <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--moss)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>
+                </div>
+              )}
+            </div>
+
+            {/* Nominatim search */}
+            <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative' }}>
+                <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex' }}>
+                  <Icon name="search" size={16} color="var(--pebble)" />
+                </div>
+                <input
+                  className="field"
+                  value={geoQuery}
+                  onChange={e => { setGeoQuery(e.target.value); searchGeo(e.target.value); }}
+                  placeholder="Or search for a location…"
+                  style={{ paddingLeft: 36 }}
+                />
+                {geoLoading && (
+                  <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--pebble)' }}>…</span>
+                )}
+              </div>
+              {geoResults.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                  background: 'var(--paper)', border: '1px solid var(--reed)',
+                  borderRadius: 'var(--r-md)', marginTop: 4,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden',
+                }}>
+                  {geoResults.map((r, i) => (
+                    <div
+                      key={i}
+                      onClick={() => {
+                        setPickedLat(parseFloat(r.lat));
+                        setPickedLng(parseFloat(r.lon));
+                        setPickedLabel(r.display_name);
+                        setGeoQuery(r.display_name.split(',')[0]);
+                        setGeoResults([]);
+                      }}
+                      style={{
+                        padding: '11px 14px', cursor: 'pointer', fontSize: 13,
+                        borderBottom: i < geoResults.length - 1 ? '1px solid var(--linen)' : 'none',
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, marginBottom: 2 }}>{r.display_name.split(',')[0]}</div>
+                      <div style={{ fontSize: 11, color: 'var(--pebble)' }}>{r.display_name.split(',').slice(1, 3).join(',').trim()}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Selected location pill */}
+            {pickedLat && pickedLabel && !(pickedLabel === (boatMooring?.label || 'Current mooring')) && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, marginTop: 10,
+                padding: '8px 12px', background: 'var(--moss-soft)',
+                borderRadius: 'var(--r-sm)', border: '1px solid var(--moss)',
+              }}>
+                <Icon name="pin" size={14} color="var(--moss)" />
+                <span style={{ flex: 1, fontSize: 12, color: 'var(--ink)', fontWeight: 500 }}>{pickedLabel.split(',')[0]}</span>
+                <button onClick={() => { setPickedLat(null); setPickedLng(null); setPickedLabel(''); setGeoQuery(''); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--pebble)', padding: 0, lineHeight: 1 }}>×</button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Description */}
         <div style={{ marginBottom: 24 }}>
           <label className="label">Description</label>
-          <textarea className="field" rows={4} value={form.description}
+          <textarea className="field" rows={5} value={form.description}
             onChange={e => set('description', e.target.value)}
             placeholder={listingType === 'boat' ? 'Describe the boat, its history, engine, and any work done...' : 'Describe the item, its condition, and any relevant details...'}
             style={{ resize: 'none' }} />
         </div>
-
-        {/* Pickup options */}
-        {listingType !== 'service' && (
-          <div style={{ marginBottom: 16 }}>
-            <div className="label">Pickup</div>
-            <div className="stack-sm">
-              <label className="card" style={{
-                display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', cursor: 'pointer',
-                borderColor: pickup === 'boat' ? 'var(--moss)' : undefined,
-                boxShadow: pickup === 'boat' ? '0 0 0 2px var(--moss-soft)' : undefined,
-              }}>
-                <input type="radio" name="pickup" checked={pickup === 'boat'} onChange={() => setPickup('boat')} style={{ display: 'none' }} />
-                <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${pickup === 'boat' ? 'var(--moss)' : 'var(--reed)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {pickup === 'boat' && <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'var(--moss)' }} />}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>From my boat</div>
-                  <Plate>{user?.boatName || 'NB UNKNOWN'}</Plate>
-                </div>
-                <Icon name="boat" size={20} color="var(--pebble)" />
-              </label>
-
-              <label className="card" style={{
-                display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', cursor: 'pointer',
-                borderColor: pickup === 'pin' ? 'var(--moss)' : undefined,
-                boxShadow: pickup === 'pin' ? '0 0 0 2px var(--moss-soft)' : undefined,
-              }}>
-                <input type="radio" name="pickup" checked={pickup === 'pin'} onChange={() => setPickup('pin')} style={{ display: 'none' }} />
-                <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${pickup === 'pin' ? 'var(--moss)' : 'var(--reed)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {pickup === 'pin' && <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'var(--moss)' }} />}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Drop a pin</div>
-                  <div style={{
-                    width: '100%', height: 50, background: 'var(--linen)',
-                    borderRadius: 'var(--r-sm)', border: '1px solid var(--reed)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <Icon name="pin" size={18} color="var(--pebble)" />
-                  </div>
-                </div>
-              </label>
-            </div>
-          </div>
-        )}
 
         {error && <div className="error-msg" style={{ marginBottom: 16 }}>{error}</div>}
       </div>
@@ -263,9 +373,10 @@ export default function CreateListingScreen() {
         background: 'var(--paper)', borderTop: '1px solid var(--reed)',
         display: 'flex', gap: 12,
       }}>
-        <button className="btn ghost" style={{ flex: 1 }}>Save draft</button>
+        {!editId && <button className="btn ghost" style={{ flex: 1 }} onClick={() => nav('/market')}>Cancel</button>}
+        {editId && <button className="btn ghost" style={{ flex: 1 }} onClick={() => nav(-1)}>Cancel</button>}
         <button className="btn primary" style={{ flex: 1 }} disabled={!canSubmit || submitting} onClick={submit}>
-          {submitting ? 'Publishing...' : 'Publish listing'}
+          {submitting ? (editId ? 'Saving...' : 'Publishing...') : (editId ? 'Save changes' : 'Publish listing')}
         </button>
       </div>
     </div>
