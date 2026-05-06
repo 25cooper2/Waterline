@@ -230,8 +230,10 @@ export default function MarketScreen() {
 
 function ProductCard({ product, onClick, distance }) {
   const img = product.images?.[0];
+  const nav = useNavigate();
+  const sellerId = product.sellerId?._id || product.sellerId;
   return (
-    <div className="card" style={{ cursor: 'pointer' }} onClick={onClick}>
+    <div className="card" style={{ cursor: 'pointer', position: 'relative' }} onClick={onClick}>
       <div style={{
         height: 130, overflow: 'hidden', borderRadius: 'var(--r-md) var(--r-md) 0 0',
         background: img ? `url(${img}) center/cover no-repeat` : 'var(--linen)',
@@ -253,12 +255,23 @@ function ProductCard({ product, onClick, distance }) {
             {distance}
           </div>
         )}
+        {sellerId && (
+          <button
+            onClick={(e) => { e.stopPropagation(); nav(`/inbox?to=${sellerId}`); }}
+            className="btn ghost"
+            style={{ marginTop: 8, width: '100%', height: 32, fontSize: 13, gap: 6 }}
+          >
+            <Icon name="inbox" size={14} /> Contact
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
 function ServiceCard({ service, onClick }) {
+  const nav = useNavigate();
+  const sellerId = service.sellerId?._id || service.sellerId;
   const tags = [service.category, service.condition].filter(Boolean);
   return (
     <div className="card" style={{ cursor: 'pointer', display: 'flex', overflow: 'hidden' }} onClick={onClick}>
@@ -288,8 +301,19 @@ function ServiceCard({ service, onClick }) {
             ))}
           </div>
         )}
-        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--moss)' }}>
-          {service.price === 0 ? 'Quote' : `£${service.price?.toLocaleString()}`}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--moss)' }}>
+            {service.price === 0 ? 'Quote' : `£${service.price?.toLocaleString()}`}
+          </div>
+          {sellerId && (
+            <button
+              onClick={(e) => { e.stopPropagation(); nav(`/inbox?to=${sellerId}`); }}
+              className="btn ghost"
+              style={{ marginLeft: 'auto', height: 30, padding: '0 10px', fontSize: 12, gap: 4 }}
+            >
+              <Icon name="inbox" size={13} /> Contact
+            </button>
+          )}
         </div>
       </div>
     </div>

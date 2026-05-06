@@ -13,6 +13,8 @@ const postSchema = new mongoose.Schema({
     body: { type: String, required: true, maxlength: 1000 },
     createdAt: { type: Date, default: Date.now },
   }],
+  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  likeCount: { type: Number, default: 0 },
   replyCount: { type: Number, default: 0 },
   reportStatus: { type: String, enum: ['active', 'pending_review', 'removed'], default: 'active' },
   reportedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],

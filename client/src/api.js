@@ -88,6 +88,7 @@ export const api = {
   getPost: (id) => req(`/api/posts/${id}`),
   replyToPost: (id, body) => req(`/api/posts/${id}/reply`, { method: 'POST', body: JSON.stringify({ body }) }),
   reportPost: (id, reason) => req(`/api/posts/${id}/report`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  likePost: (id) => req(`/api/posts/${id}/like`, { method: 'POST' }),
 
   // Follows
   searchUsers: (q) => req(`/api/users/_search?q=${encodeURIComponent(q)}`),

@@ -53,6 +53,16 @@ router.get('/', async (req, res) => {
     const { lat, lng, radius, tag, q, followingOnly, authorId, limit } = req.query;
     const filter = { reportStatus: 'active' };
 
+    let currentUserId = null;
+    if (req.headers.authorization) {
+      try {
+        const jwt = (await import('jsonwebtoken')).default;
+        const token = req.headers.authorization.replace('Bearer ', '');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+        currentUserId = decoded.userId;
+      } catch {}
+    }
+
     if (tag) filter.tags = String(tag).toLowerCase().trim();
     if (authorId) filter.authorId = authorId;
     if (q) filter.$or = [
@@ -60,16 +70,11 @@ router.get('/', async (req, res) => {
       { tags: { $regex: q.replace(/^#/, '').toLowerCase(), $options: 'i' } },
     ];
 
-    if (followingOnly === 'true' && req.headers.authorization) {
-      try {
-        const jwt = (await import('jsonwebtoken')).default;
-        const token = req.headers.authorization.replace('Bearer ', '');
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
-        const follows = await Follow.find({ followerId: decoded.userId }).select('followingId');
-        const ids = follows.map(f => f.followingId);
-        ids.push(decoded.userId);
-        filter.authorId = { $in: ids };
-      } catch {}
+    if (followingOnly === 'true' && currentUserId) {
+      const follows = await Follow.find({ followerId: currentUserId }).select('followingId');
+      const ids = follows.map(f => f.followingId);
+      ids.push(currentUserId);
+      filter.authorId = { $in: ids };
     }
 
     let posts = await Post.find(filter)
@@ -85,7 +90,13 @@ router.get('/', async (req, res) => {
         return milesBetween(lat0, lng0, p.lat, p.lng) <= r;
       });
     }
-    res.json(posts);
+
+    const out = posts.map(p => {
+      const obj = p.toObject();
+      obj.likedByMe = currentUserId ? p.likes.some(id => id.toString() === currentUserId) : false;
+      return obj;
+    });
+    res.json(out);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -117,6 +128,26 @@ router.post('/:postId/reply', authMiddleware, async (req, res) => {
     await post.save();
     await post.populate('replies.authorId', 'displayName username profilePhotoUrl boatIndexNumber');
     res.status(201).json(post.replies[post.replies.length - 1]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Like / unlike a post (toggle)
+router.post('/:postId/like', authMiddleware, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.postId);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    const uid = req.user.userId;
+    const idx = post.likes.findIndex(id => id.toString() === uid);
+    if (idx === -1) {
+      post.likes.push(uid);
+    } else {
+      post.likes.splice(idx, 1);
+    }
+    post.likeCount = post.likes.length;
+    await post.save();
+    res.json({ likeCount: post.likeCount, likedByMe: idx === -1 });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

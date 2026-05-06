@@ -864,7 +864,7 @@ out center geom qt;`;
 
       {/* Search bar */}
       {!locationPickMode && (
-        <div style={{ position: 'absolute', top: 12, left: 12, right: 12, zIndex: 1000 }}>
+        <div style={{ position: 'absolute', top: 12, left: 12, right: 12, zIndex: 1100 }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 10,
             background: 'var(--paper)', borderRadius: 12,
