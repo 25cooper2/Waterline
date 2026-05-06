@@ -7,14 +7,15 @@ const router = express.Router();
 // Report hazard
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { hazardType, description, lat, lng, severity } = req.body;
+    const { hazardType, description, lat, lng, severity, startsAt, endsAt, photos } = req.body;
 
     if (!hazardType || !description || lat === undefined || lng === undefined) {
       return res.status(400).json({ error: 'Hazard type, description, latitude, and longitude required' });
     }
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    const expiresAt = endsAt ? new Date(endsAt) : (() => {
+      const d = new Date(); d.setDate(d.getDate() + 30); return d;
+    })();
 
     const hazard = new Hazard({
       reportedBy: req.user.userId,
@@ -23,7 +24,10 @@ router.post('/', authMiddleware, async (req, res) => {
       lat,
       lng,
       severity: severity || 'medium',
-      expiresAt
+      source: req.user.role === 'admin' ? 'admin' : 'community',
+      startsAt: startsAt ? new Date(startsAt) : null,
+      expiresAt,
+      photos: Array.isArray(photos) ? photos.slice(0, 3) : [],
     });
 
     await hazard.save();

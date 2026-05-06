@@ -676,20 +676,6 @@ export default function LogbookScreen() {
                 </div>
               </div>
 
-              {/* Locks / Miles */}
-              <div style={styles.fieldRow}>
-                <div>
-                  <label className="label">Locks</label>
-                  <input className="field" type="number" min="0" value={form.locks}
-                    onChange={e => setForm(f => ({ ...f, locks: e.target.value }))} placeholder="0" />
-                </div>
-                <div>
-                  <label className="label">Miles</label>
-                  <input className="field" type="number" min="0" step="0.1" value={form.distance}
-                    onChange={e => setForm(f => ({ ...f, distance: e.target.value }))} placeholder="0" />
-                </div>
-              </div>
-
               {formError && <div className="error-msg">{formError}</div>}
 
               <button onClick={submitEntry} className="btn primary block">

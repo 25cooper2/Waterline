@@ -12,7 +12,10 @@ const hazardSchema = new mongoose.Schema({
   resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   isResolved: { type: Boolean, default: false },
   resolvedAt: { type: Date, default: null },
+  source: { type: String, enum: ['admin', 'community'], default: 'community' },
+  startsAt: { type: Date, default: null },
   expiresAt: { type: Date, required: true },
+  photos: [{ type: String }],
   createdAt: { type: Date, default: Date.now }
 });
 

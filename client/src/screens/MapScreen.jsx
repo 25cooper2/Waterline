@@ -38,7 +38,18 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-const SEV_COLORS = { low: '#1A6B5A', medium: '#C28A2C', high: '#B5462E' };
+const SEV_COLORS = { low: '#F5C518', medium: '#E68A00', high: '#C0392B' };
+const SEV_LABELS = { low: 'Yellow', medium: 'Amber', high: 'Red' };
+
+function makeHazardIcon(severity) {
+  const c = SEV_COLORS[severity] || SEV_COLORS.medium;
+  return L.divIcon({
+    html: `<svg width="20" height="18" viewBox="0 0 20 18" xmlns="http://www.w3.org/2000/svg"><polygon points="10,2 18.5,16.5 1.5,16.5" fill="${c}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/><text x="10" y="14.5" text-anchor="middle" fill="white" font-size="9" font-weight="bold" font-family="sans-serif">!</text></svg>`,
+    className: '',
+    iconSize: [20, 18],
+    iconAnchor: [10, 9],
+  });
+}
 const HAZARD_TYPES = [
   { id: 'debris', label: 'Debris' },
   { id: 'underwater_obstruction', label: 'Obstruction' },
@@ -705,7 +716,17 @@ out center geom qt;`;
     setLocationPickMode(null);
   };
 
-  const toggleFilter = (key) => setFilters(f => ({ ...f, [key]: !f[key] }));
+  const toggleFilter = (key) => {
+    if (key === 'logbook') {
+      setFilters(f => {
+        const on = !f.logbook;
+        if (on) setCanalFilters(Object.fromEntries(Object.keys(FEATURE_META).map(k => [k, false])));
+        return { ...f, logbook: on };
+      });
+    } else {
+      setFilters(f => ({ ...f, [key]: !f[key] }));
+    }
+  };
   const visibleHazards = filters.hazards ? hazards : [];
 
   return (
@@ -751,8 +772,7 @@ out center geom qt;`;
 
         {/* Hazard circles */}
         {visibleHazards.map(h => (
-          <Circle key={h._id} center={[h.lat, h.lng]} radius={300}
-            pathOptions={{ color: SEV_COLORS[h.severity] || '#C28A2C', fillOpacity: 0.35, weight: 2 }}
+          <Marker key={h._id} position={[h.lat, h.lng]} icon={makeHazardIcon(h.severity)}
             eventHandlers={{ click: () => setSelectedPin({ kind: 'hazard', ...h }) }} />
         ))}
 
@@ -968,6 +988,19 @@ out center geom qt;`;
           {/* Rows */}
           {canalPanelOpen && (
             <div style={{ borderTop: '1px solid var(--reed)', padding: '6px 4px 8px', maxHeight: 340, overflowY: 'auto' }}>
+              {/* All on / off */}
+              {(() => {
+                const allOn = Object.values(canalFilters).every(Boolean);
+                const anyOn = Object.values(canalFilters).some(Boolean);
+                return (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 13, fontWeight: 700, borderBottom: '1px solid var(--reed)', marginBottom: 4 }}>
+                    <input type="checkbox" checked={allOn} ref={el => { if (el) el.indeterminate = !allOn && anyOn; }}
+                      onChange={() => setCanalFilters(Object.fromEntries(Object.keys(FEATURE_META).map(k => [k, !allOn])))}
+                      style={{ cursor: 'pointer', accentColor: 'var(--moss)' }} />
+                    All
+                  </label>
+                );
+              })()}
               {Object.entries(FEATURE_META).map(([key, meta]) => (
                 <label key={key} style={{
                   display: 'flex', alignItems: 'center', gap: 8,
@@ -1079,8 +1112,8 @@ function LogbookSheet({ pin, onClose }) {
 
 function HazardSheet({ pin, onClose }) {
   const navigate = useNavigate();
-  const sev = pin.severity === 'high' ? 'rust' : pin.severity === 'medium' ? 'amber' : 'moss';
-  const sevLabel = pin.severity?.charAt(0).toUpperCase() + pin.severity?.slice(1);
+  const sev = pin.severity === 'high' ? 'rust' : pin.severity === 'medium' ? 'amber' : 'yellow';
+  const sevLabel = SEV_LABELS[pin.severity] || 'Amber';
   return (
     <div style={{ padding: '8px 22px 22px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
