@@ -888,11 +888,6 @@ out center geom qt;`;
           <FilterChip active={filters.friends} onClick={() => toggleFilter('friends')}><Icon name="friend" size={13} stroke={2} /> Friends</FilterChip>
           <FilterChip active={filters.services} onClick={() => toggleFilter('services')}><Icon name="fuel" size={13} stroke={2} /> Services</FilterChip>
           <FilterChip active={filters.logbook} onClick={() => toggleFilter('logbook')}>Logbook</FilterChip>
-          {filters.logbook && (
-            <FilterChip active={editJourney} onClick={() => setEditJourney(v => !v)}>
-              {editJourney ? '✓ Done' : '✎ Edit route'}
-            </FilterChip>
-          )}
         </div>
       )}
 
@@ -924,6 +919,22 @@ out center geom qt;`;
       {!locationPickMode && (
         <div style={{ position: 'absolute', right: 12, top: 120, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <CtrlBtn onClick={goToMyLocation}><Icon name="compass" size={20} color="var(--moss)" stroke={1.8} /></CtrlBtn>
+          {/* Edit route toggle — only when logbook layer is on */}
+          {filters.logbook && (
+            <CtrlBtn
+              onClick={() => setEditJourney(v => !v)}
+              style={{
+                background: editJourney ? 'var(--moss-soft)' : 'var(--paper)',
+              }}
+              title={editJourney ? 'Done editing routes' : 'Edit routes'}
+            >
+              <Icon
+                name={editJourney ? 'check' : 'edit'}
+                size={20}
+                color={editJourney ? 'var(--moss)' : 'var(--silt)'}
+              />
+            </CtrlBtn>
+          )}
         </div>
       )}
 
