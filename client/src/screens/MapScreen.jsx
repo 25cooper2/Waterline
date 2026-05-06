@@ -917,12 +917,13 @@ out center geom qt;`;
         </div>
       )}
 
-      {/* Edit route button — left side, black pill with white text, matches compass height */}
+      {/* Edit route button — centered between canal features & compass, same row */}
       {!locationPickMode && filters.logbook && (
         <button
           onClick={() => setEditJourney(v => !v)}
           style={{
-            position: 'absolute', left: 12, top: 120, zIndex: 1000,
+            position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+            top: 120, zIndex: 1000,
             background: editJourney ? '#111' : '#333',
             color: '#fff',
             border: 'none',
