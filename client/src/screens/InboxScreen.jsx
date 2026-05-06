@@ -5,7 +5,8 @@ import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 import Plate from '../components/Plate';
-import { getCachedLocation } from '../utils/deviceLocation';
+import { getCachedLocation, saveDeviceLocation } from '../utils/deviceLocation';
+import { compressImage } from '../utils/imageCompress';
 
 const HAIL_REASONS = [
   'Moored next to you',
@@ -57,6 +58,13 @@ export default function InboxScreen() {
   const [showPost, setShowPost] = useState(false);
   const [showLoginGate, setShowLoginGate] = useState(false);
   const [openPostId, setOpenPostId] = useState(null);
+  const [showDM, setShowDM] = useState(false);
+  const [dmQuery, setDmQuery] = useState('');
+  const [dmResults, setDmResults] = useState([]);
+  const [hazardsNearby, setHazardsNearby] = useState([]);
+  const [postPhotos, setPostPhotos] = useState([]);
+  const photoInputRef = useRef(null);
+  const dmTimer = useRef(null);
 
   const [hailForm, setHailForm] = useState({ recipientBoatIndexNumber: '', body: '', reason: '' });
   const [hailError, setHailError] = useState('');
@@ -76,23 +84,55 @@ export default function InboxScreen() {
   };
 
   /* ---- load feed ---- */
-  const loadFeed = () => {
+  const getLiveLocation = () => new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(getCachedLocation());
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        saveDeviceLocation(pos.coords.latitude, pos.coords.longitude);
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => resolve(getCachedLocation()),
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
+    );
+  });
+
+  const loadFeed = async () => {
     setLoading(true);
     const params = {};
+    let nearLoc = null;
     if (scope === 'nearby') {
-      const cached = getCachedLocation();
-      if (cached) {
-        params.lat = cached.lat;
-        params.lng = cached.lng;
+      nearLoc = await getLiveLocation();
+      if (nearLoc) {
+        params.lat = nearLoc.lat;
+        params.lng = nearLoc.lng;
         params.radius = radiusMi;
       }
     } else if (scope === 'following') {
-      if (!user) { setLoading(false); setPosts([]); return; }
+      if (!user) { setLoading(false); setPosts([]); setHazardsNearby([]); return; }
       params.followingOnly = 'true';
     }
     if (activeTag) params.tag = activeTag;
     if (feedQuery.trim()) params.q = feedQuery.trim();
-    api.listPosts(params).then(setPosts).catch(() => setPosts([])).finally(() => setLoading(false));
+    try {
+      const result = await api.listPosts(params);
+      setPosts(result || []);
+    } catch { setPosts([]); }
+
+    // Pull hazards within the same nearby radius and merge into the feed
+    if (scope === 'nearby' && nearLoc && !activeTag && !feedQuery.trim()) {
+      const dLat = radiusMi / 69;
+      const dLng = radiusMi / (69 * Math.cos(nearLoc.lat * Math.PI / 180));
+      try {
+        const hz = await api.listHazards({
+          minLat: nearLoc.lat - dLat, maxLat: nearLoc.lat + dLat,
+          minLng: nearLoc.lng - dLng, maxLng: nearLoc.lng + dLng,
+        });
+        setHazardsNearby(hz || []);
+      } catch { setHazardsNearby([]); }
+    } else {
+      setHazardsNearby([]);
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -105,11 +145,11 @@ export default function InboxScreen() {
     api.trendingTags().then(setTrendingTags).catch(() => {});
   }, []);
 
-  /* ---- tag autocomplete ---- */
+  /* ---- tag autocomplete (comma-separated; spaces allowed inside a tag) ---- */
   useEffect(() => {
     clearTimeout(tagSearchTimer.current);
-    const last = tagInput.split(/[,\s]+/).pop() || '';
-    const cleaned = last.replace(/^#/, '').toLowerCase();
+    const last = tagInput.split(',').pop() || '';
+    const cleaned = last.replace(/^#/, '').toLowerCase().trim();
     if (cleaned.length < 2) { setTagSuggestions([]); return; }
     tagSearchTimer.current = setTimeout(() => {
       api.searchTags(cleaned).then(setTagSuggestions).catch(() => setTagSuggestions([]));
@@ -118,12 +158,21 @@ export default function InboxScreen() {
   }, [tagInput]);
 
   const completeTag = (tag) => {
-    const parts = tagInput.split(/[,\s]+/);
-    parts[parts.length - 1] = tag;
-    const joined = parts.filter(Boolean).join(' ') + ' ';
-    setTagInput(joined);
+    const parts = tagInput.split(',');
+    parts[parts.length - 1] = ' ' + tag;
+    setTagInput(parts.join(',') + ', ');
     setTagSuggestions([]);
   };
+
+  /* ---- DM user search ---- */
+  useEffect(() => {
+    clearTimeout(dmTimer.current);
+    if (!showDM || dmQuery.trim().length < 2) { setDmResults([]); return; }
+    dmTimer.current = setTimeout(() => {
+      api.searchUsers(dmQuery.trim()).then(setDmResults).catch(() => setDmResults([]));
+    }, 250);
+    return () => clearTimeout(dmTimer.current);
+  }, [dmQuery, showDM]);
 
   /* ---- hail ---- */
   const openHail = () => {
@@ -152,7 +201,15 @@ export default function InboxScreen() {
     if (!requireLogin()) return;
     setPostForm({ body: '', tags: '', includeLocation: true });
     setTagInput('');
+    setPostPhotos([]);
     setPostError(''); setShowPost(true);
+  };
+
+  const handlePhotoPick = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 3 - postPhotos.length);
+    const compressed = await Promise.all(files.map(f => compressImage(f, { maxDim: 1400, quality: 0.8 })));
+    setPostPhotos(p => [...p, ...compressed.filter(Boolean)]);
+    if (photoInputRef.current) photoInputRef.current.value = '';
   };
 
   const submitPost = async () => {
@@ -160,10 +217,11 @@ export default function InboxScreen() {
     setPostSubmitting(true);
     setPostError('');
     try {
-      const body = { body: postForm.body.trim(), tags: tagInput };
+      const body = { body: postForm.body.trim(), tags: tagInput, photos: postPhotos };
       if (postForm.includeLocation) {
-        const cached = getCachedLocation();
-        if (cached) { body.lat = cached.lat; body.lng = cached.lng; }
+        // Use device's live location at the moment of posting
+        const live = await getLiveLocation();
+        if (live) { body.lat = live.lat; body.lng = live.lng; }
       }
       await api.createPost(body);
       setShowPost(false);
@@ -205,6 +263,18 @@ export default function InboxScreen() {
                     <div style={{ flex: 1, textAlign: 'left' }}>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>Post to feed</div>
                       <div style={{ fontSize: 12, color: 'var(--silt)' }}>Share with nearby boaters</div>
+                    </div>
+                  </button>
+                  <div style={{ height: 1, background: 'var(--reed)' }} />
+                  <button onClick={() => {
+                    setMenuOpen(false);
+                    if (!requireLogin()) return;
+                    setDmQuery(''); setDmResults([]); setShowDM(true);
+                  }} style={menuItemStyle}>
+                    <Icon name="friend" size={16} color="var(--moss)" />
+                    <div style={{ flex: 1, textAlign: 'left' }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>Direct message</div>
+                      <div style={{ fontSize: 12, color: 'var(--silt)' }}>Search by name, username or boat</div>
                     </div>
                   </button>
                 </div>
@@ -289,25 +359,32 @@ export default function InboxScreen() {
       <div className="scroll" style={{ marginTop: 10 }}>
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--silt)' }}>Loading…</div>
-        ) : posts.length === 0 ? (
+        ) : (posts.length === 0 && hazardsNearby.length === 0) ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--silt)' }}>
             <Icon name="image" size={40} color="var(--pebble)" />
             <p style={{ margin: '12px 0 4px', fontWeight: 500, fontSize: 16, color: 'var(--ink)' }}>
-              {scope === 'nearby' ? 'No posts in your area yet' : scope === 'following' ? 'No posts from boaters you follow' : 'No posts match that search'}
+              {scope === 'nearby' ? 'Nothing nearby right now' : scope === 'following' ? 'No posts from boaters you follow' : 'No posts match that search'}
             </p>
             <p style={{ fontSize: 14, lineHeight: 1.5, maxWidth: 280, margin: '0 auto' }}>
               {user ? 'Tap the + button to share what\'s happening.' : 'Sign in to post and reply.'}
             </p>
           </div>
         ) : (
-          posts.map(p => (
-            <PostCard key={p._id} post={p}
-              onTagClick={(t) => { setActiveTag(t); setFeedQuery(''); }}
-              onAuthorClick={(authorId) => navigate(`/profile/${authorId}`)}
-              onOpen={() => setOpenPostId(p._id)}
-              currentUser={user}
-            />
-          ))
+          [
+            ...hazardsNearby.map(h => ({ kind: 'hazard', sortAt: h.createdAt, data: h })),
+            ...posts.map(p => ({ kind: 'post', sortAt: p.createdAt, data: p })),
+          ]
+            .sort((a, b) => new Date(b.sortAt) - new Date(a.sortAt))
+            .map(item => item.kind === 'hazard' ? (
+              <HazardCard key={`hz-${item.data._id}`} hazard={item.data} onOpen={() => navigate(`/hazard/${item.data._id}`, { state: { hazard: item.data } })} />
+            ) : (
+              <PostCard key={item.data._id} post={item.data}
+                onTagClick={(t) => { setActiveTag(t); setFeedQuery(''); }}
+                onAuthorClick={(authorId) => navigate(`/profile/${authorId}`)}
+                onOpen={() => setOpenPostId(item.data._id)}
+                currentUser={user}
+              />
+            ))
         )}
       </div>
 
@@ -398,6 +475,50 @@ export default function InboxScreen() {
         </div>
       )}
 
+      {/* Direct Message modal */}
+      {showDM && (
+        <div onClick={() => setShowDM(false)} style={{ position: 'absolute', inset: 0, zIndex: 2000, background: 'rgba(31,42,38,0.5)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={e => e.stopPropagation()} className="sheet" style={{ width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
+            <div className="sheet-handle" />
+            <div style={{ padding: '12px 20px 0' }}>
+              <h3 style={{ margin: '0 0 6px', fontSize: 19, fontWeight: 600 }}>Direct message</h3>
+              <p style={{ margin: '0 0 12px', fontSize: 13.5, color: 'var(--silt)' }}>Search by username, name or boat name.</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--linen)', borderRadius: 10, padding: '8px 12px', marginBottom: 12 }}>
+                <Icon name="search" size={16} color="var(--silt)" />
+                <input autoFocus value={dmQuery} onChange={e => setDmQuery(e.target.value)}
+                  placeholder="Type to search…"
+                  style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 14, fontFamily: 'var(--font-sans)' }} />
+              </div>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 8px' }}>
+              {dmResults.length === 0 ? (
+                <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--silt)', fontSize: 13.5 }}>
+                  {dmQuery.trim().length < 2 ? 'Type at least 2 characters.' : 'No boaters match that search.'}
+                </div>
+              ) : (
+                dmResults.map(u => (
+                  <button key={u._id} onClick={() => { setShowDM(false); navigate(`/inbox/${u._id}`); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 0', background: 'none', border: 0, borderBottom: '1px solid var(--linen)', cursor: 'pointer', textAlign: 'left' }}>
+                    <Avatar name={u.displayName || u.username} src={u.profilePhotoUrl} size={40} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14.5 }}>
+                        {u.username ? `@${u.username}` : (u.displayName || 'Boater')}
+                      </div>
+                      <div style={{ fontSize: 12.5, color: 'var(--silt)' }}>
+                        {u.displayName && u.username ? u.displayName : ''}
+                        {u.boatName ? ` · ${u.boatName}` : ''}
+                        {u.boatIndexNumber ? ` · ${u.boatIndexNumber}` : ''}
+                      </div>
+                    </div>
+                    <Icon name="chevron" size={16} color="var(--pebble)" />
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Post composer */}
       {showPost && (
         <div onClick={() => setShowPost(false)} style={{ position: 'absolute', inset: 0, zIndex: 2000, background: 'rgba(31,42,38,0.5)', display: 'flex', alignItems: 'flex-end' }}>
@@ -414,13 +535,31 @@ export default function InboxScreen() {
                     placeholder="e.g. Beer festival on the towpath at Victoria Park this weekend…"
                     maxLength={2000} style={{ resize: 'none' }} />
                 </div>
+                <div>
+                  <label className="label">Photos ({postPhotos.length}/3, optional)</label>
+                  <input ref={photoInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handlePhotoPick} />
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {postPhotos.map((src, i) => (
+                      <div key={i} style={{ position: 'relative', width: 72, height: 72, borderRadius: 8, background: `url(${src}) center/cover`, border: '1px solid var(--reed)' }}
+                        onClick={() => setPostPhotos(p => p.filter((_, idx) => idx !== i))}>
+                        <div style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, cursor: 'pointer' }}>×</div>
+                      </div>
+                    ))}
+                    {postPhotos.length < 3 && (
+                      <button type="button" onClick={() => photoInputRef.current?.click()}
+                        style={{ width: 72, height: 72, borderRadius: 8, border: '2px dashed var(--reed)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', background: 'transparent', color: 'var(--pebble)', fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
+                        <Icon name="camera" size={20} color="var(--pebble)" /> Add
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div style={{ position: 'relative' }}>
                   <label className="label">Tags</label>
                   <input className="field" value={tagInput}
                     onChange={e => setTagInput(e.target.value)}
-                    placeholder="grand-union victoria-park beer-festival" />
+                    placeholder="grand union, victoria park, beer festival" />
                   <div style={{ fontSize: 12, color: 'var(--silt)', marginTop: 6 }}>
-                    Type to search existing tags. Up to 8.
+                    Comma-separated. Type to search existing tags. Up to 8.
                   </div>
                   {tagSuggestions.length > 0 && (
                     <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 5, background: 'var(--paper)', border: '1px solid var(--reed)', borderRadius: 10, marginTop: 4, boxShadow: 'var(--sh-2)', overflow: 'hidden' }}>
@@ -481,6 +620,13 @@ function PostCard({ post, onTagClick, onAuthorClick, onOpen }) {
             <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--silt)', flexShrink: 0 }}>{timeAgo(post.createdAt)}</span>
           </div>
           <div style={{ fontSize: 14.5, color: 'var(--ink)', lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{post.body}</div>
+          {post.photos?.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              {post.photos.map((src, i) => (
+                <div key={i} style={{ width: 96, height: 96, borderRadius: 8, background: `url(${src}) center/cover`, border: '1px solid var(--reed)' }} />
+              ))}
+            </div>
+          )}
           {post.tags?.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
               {post.tags.map(t => (
@@ -624,6 +770,30 @@ function PostDetailSheet({ postId, onClose, requireLogin, navigate, currentUser 
           <button onClick={submitReply} disabled={!reply.trim() || busy || !currentUser} className="btn primary" style={{ flexShrink: 0 }}>
             <Icon name="send" size={16} color="var(--paper)" />
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const SEV_COLORS = { high: '#C0392B', medium: '#E68A00', low: '#F5C518' };
+function HazardCard({ hazard, onOpen }) {
+  const color = SEV_COLORS[hazard.severity] || SEV_COLORS.medium;
+  return (
+    <div onClick={onOpen} style={{ padding: '14px 20px', borderBottom: '1px solid var(--linen)', cursor: 'pointer', display: 'flex', gap: 12 }}>
+      <div style={{ width: 42, height: 42, borderRadius: 10, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Icon name="warning" size={22} color="#fff" stroke={2.2} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color, padding: '2px 7px', borderRadius: 4, background: color + '22' }}>Hazard nearby</span>
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--silt)' }}>
+            {(() => { const d = Date.now() - new Date(hazard.createdAt).getTime(); const m = Math.floor(d/60000); if (m<60) return m+'m'; const h=Math.floor(m/60); if(h<24) return h+'h'; return Math.floor(h/24)+'d'; })()}
+          </span>
+        </div>
+        <div style={{ fontSize: 14.5, marginTop: 4, lineHeight: 1.4 }}>{hazard.description || 'Hazard reported'}</div>
+        <div style={{ fontSize: 12, color: 'var(--silt)', marginTop: 4 }}>
+          {hazard.reportedBy?.displayName || hazard.reportedBy?.username || 'Boater'} · {hazard.confirmationCount || 0} confirm{(hazard.confirmationCount || 0) === 1 ? '' : 's'}
         </div>
       </div>
     </div>

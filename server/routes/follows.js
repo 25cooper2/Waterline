@@ -5,6 +5,27 @@ import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Search users by username, display name, or boat name (must be before :userId)
+router.get('/_search', authMiddleware, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 2) return res.json([]);
+    const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const users = await User.find({
+      _id: { $ne: req.user.userId },
+      $or: [
+        { username: re },
+        { displayName: re },
+        { boatName: re },
+        { boatIndexNumber: re },
+      ],
+    }).select('displayName username profilePhotoUrl boatIndexNumber boatName').limit(15);
+    res.json(users);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Public profile (safe fields only)
 router.get('/:userId', async (req, res) => {
   try {

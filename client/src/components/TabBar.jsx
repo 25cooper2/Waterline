@@ -4,7 +4,7 @@ import Icon from './Icon';
 const tabs = [
   { to: '/map', icon: 'map', label: 'Map' },
   { to: '/market', icon: 'market', label: 'Market' },
-  { to: '/inbox', icon: 'inbox', label: 'Feed' },
+  { to: '/inbox', icon: 'inbox', label: 'Hub' },
   { to: '/logbook', icon: 'logbook', label: 'Logbook' },
   { to: '/me', icon: 'me', label: 'Me' },
 ];
