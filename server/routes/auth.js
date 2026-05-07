@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import User from '../models/User.js';
 import Boat from '../models/Boat.js';
+import Product from '../models/Product.js';
 import Logbook from '../models/Logbook.js';
 import { authMiddleware } from '../middleware/auth.js';
 
@@ -174,11 +175,7 @@ router.delete('/me', authMiddleware, async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const Boat = (await import('../models/Boat.js')).default;
-    const Product = (await import('../models/Product.js')).default;
-    const Logbook = (await import('../models/Logbook.js')).default;
-
-    // Remove boats owned by this user
+    // Remove boats owned by this user and their associated data
     const boats = await Boat.find({ ownerId: userId });
     for (const boat of boats) {
       await Product.deleteMany({ boatId: boat._id });
@@ -186,9 +183,10 @@ router.delete('/me', authMiddleware, async (req, res) => {
     }
     await Boat.deleteMany({ ownerId: userId });
 
-    // Remove user's own listings not tied to a boat
+    // Remove user's own listings
     await Product.deleteMany({ sellerId: userId });
 
+    // Remove user account
     await User.findByIdAndDelete(userId);
     res.json({ ok: true });
   } catch (error) {
