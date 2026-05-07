@@ -6,7 +6,6 @@ export default function AuthScreen() {
   const [tab, setTab] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, register } = useAuth();
@@ -20,7 +19,7 @@ export default function AuthScreen() {
         await login(email, password);
         nav('/map');
       } else {
-        await register(email, password, displayName);
+        await register(email, password);
         nav('/onboarding/welcome');
       }
     } catch (e) {
@@ -109,18 +108,6 @@ export default function AuthScreen() {
 
         {/* Form */}
         <div className="stack">
-          {tab === 'signup' && (
-            <div>
-              <label className="label">Display name</label>
-              <input
-                className="field"
-                value={displayName}
-                onChange={e => setDisplayName(e.target.value)}
-                placeholder="Your name"
-              />
-            </div>
-          )}
-
           <div>
             <label className="label">Email</label>
             <input

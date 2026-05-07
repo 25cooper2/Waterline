@@ -19,7 +19,7 @@ export default function OnbDoneScreen() {
           You're aboard.
         </h1>
         <p style={{ color: 'var(--ink)', maxWidth: 320, lineHeight: 1.55, fontSize: 15.5 }}>
-          Your licence is being reviewed. While you wait, the rest of Waterline is open to you.
+          Welcome to Waterline. Explore the map, marketplace and community.
         </p>
 
         <div className="card" style={{ marginTop: 32, width: '100%', textAlign: 'left' }}>

@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import { api } from '../api';
 import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 
@@ -17,6 +19,21 @@ function SettingsRow({ icon, label, meta, onClick }) {
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
+  const [deleteStep, setDeleteStep] = useState(0); // 0=hidden, 1=confirm prompt, 2=deleting
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleDelete = async () => {
+    setDeleteStep(2);
+    setDeleteError('');
+    try {
+      await api.deleteAccount();
+      logout();
+      nav('/');
+    } catch (e) {
+      setDeleteError(e.message);
+      setDeleteStep(1);
+    }
+  };
 
   const memberSince = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
@@ -95,13 +112,28 @@ export default function SettingsScreen() {
         </div>
 
         <div style={{ padding: '12px 20px 0', textAlign: 'center' }}>
-          <button
-            onClick={() => {}}
-            className="btn text"
-            style={{ color: 'var(--rust)', fontSize: 14 }}
-          >
-            Delete account
-          </button>
+          {deleteStep === 0 && (
+            <button onClick={() => setDeleteStep(1)} className="btn text" style={{ color: 'var(--rust)', fontSize: 14 }}>
+              Delete account
+            </button>
+          )}
+          {deleteStep >= 1 && (
+            <div style={{ background: 'var(--paper)', border: '1.5px solid var(--rust)', borderRadius: 14, padding: '18px 18px', textAlign: 'left' }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--rust)', marginBottom: 8 }}>Delete your account?</div>
+              <div style={{ fontSize: 13.5, color: 'var(--ink)', lineHeight: 1.5, marginBottom: 16 }}>
+                This will permanently remove your profile, boats, listings and logbook. This cannot be undone.
+              </div>
+              {deleteError && <div className="error-msg" style={{ marginBottom: 12 }}>{deleteError}</div>}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => { setDeleteStep(0); setDeleteError(''); }} className="btn ghost" style={{ flex: 1 }} disabled={deleteStep === 2}>
+                  Cancel
+                </button>
+                <button onClick={handleDelete} className="btn primary" style={{ flex: 1, background: 'var(--rust)', borderColor: 'var(--rust)' }} disabled={deleteStep === 2}>
+                  {deleteStep === 2 ? 'Deleting…' : 'Yes, delete'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

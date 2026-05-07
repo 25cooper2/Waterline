@@ -33,7 +33,7 @@ export default function OnbBoatScreen() {
     try {
       await api.createBoat({ boatIndexNumber: boatIndex.toUpperCase(), boatName, boatType });
       await refreshUser();
-      nav('/onboarding/verify');
+      nav('/onboarding/done');
     } catch (e) {
       setError(e.message);
     } finally {

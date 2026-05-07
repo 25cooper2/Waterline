@@ -27,8 +27,8 @@ export function AuthProvider({ children }) {
     catch { setUser(data.user); return data.user; }
   };
 
-  const register = async (email, password, displayName) => {
-    const data = await api.register({ email, password, displayName });
+  const register = async (email, password) => {
+    const data = await api.register({ email, password });
     localStorage.setItem('wl_token', data.token);
     try { const full = await api.me(); setUser(full); return full; }
     catch { setUser(data.user); return data.user; }

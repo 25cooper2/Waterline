@@ -121,14 +121,40 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
-// Update current user profile (displayName, username, bio, profilePhotoUrl, avatarColor)
+// Check username availability
+router.get('/check-username', async (req, res) => {
+  try {
+    const { username } = req.query;
+    if (!username || username.length < 3) return res.json({ available: false });
+    const normalized = username.toLowerCase();
+    // Exclude the requesting user's own username if authenticated
+    let excludeId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const payload = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
+        excludeId = payload.userId;
+      } catch { /* ignore invalid token */ }
+    }
+    const query = { username: normalized };
+    if (excludeId) query._id = { $ne: excludeId };
+    const existing = await User.findOne(query).select('_id');
+    res.json({ available: !existing });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update current user profile
 router.put('/me', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    const { displayName, username, bio, profilePhotoUrl, avatarColor } = req.body;
+    const { firstName, surname, displayName, username, bio, profilePhotoUrl, avatarColor } = req.body;
+    if (firstName !== undefined) user.firstName = firstName || null;
+    if (surname !== undefined) user.surname = surname || null;
     if (displayName !== undefined) user.displayName = displayName;
-    if (username !== undefined) user.username = username || null;
+    if (username !== undefined) user.username = username ? username.toLowerCase() : null;
     if (bio !== undefined) user.bio = bio;
     if (profilePhotoUrl !== undefined) user.profilePhotoUrl = profilePhotoUrl;
     if (avatarColor !== undefined) user.avatarColor = avatarColor;
@@ -137,6 +163,35 @@ router.put('/me', authMiddleware, async (req, res) => {
     res.json(user.toJSON());
   } catch (error) {
     if (error.code === 11000) return res.status(400).json({ error: 'Username already taken' });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete account
+router.delete('/me', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const Boat = (await import('../models/Boat.js')).default;
+    const Product = (await import('../models/Product.js')).default;
+    const Logbook = (await import('../models/Logbook.js')).default;
+
+    // Remove boats owned by this user
+    const boats = await Boat.find({ ownerId: userId });
+    for (const boat of boats) {
+      await Product.deleteMany({ boatId: boat._id });
+      await Logbook.deleteMany({ boatId: boat._id });
+    }
+    await Boat.deleteMany({ ownerId: userId });
+
+    // Remove user's own listings not tied to a boat
+    await Product.deleteMany({ sellerId: userId });
+
+    await User.findByIdAndDelete(userId);
+    res.json({ ok: true });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
