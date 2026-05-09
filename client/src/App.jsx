@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from './AuthContext';
+import WelcomeCarousel from './components/WelcomeCarousel';
 import TabBar from './components/TabBar';
 import SplashScreen from './screens/SplashScreen';
 import AuthScreen from './screens/AuthScreen';
@@ -44,6 +46,13 @@ function Layout() {
 export default function App() {
   const { loading, user } = useAuth();
 
+  // Show the welcome carousel to first-time visitors only.
+  // While it's visible, MapScreen renders invisibly behind it so the
+  // map tiles and canal data start loading straight away.
+  const [showCarousel, setShowCarousel] = useState(
+    () => !localStorage.getItem('wl_welcomed')
+  );
+
   if (loading) {
     return (
       <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, background: 'var(--paper)' }}>
@@ -54,8 +63,26 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      {/* Public / auth */}
+    <>
+      {/* Welcome carousel — full-screen overlay for first-time visitors */}
+      {showCarousel && (
+        <>
+          {/* MapScreen hidden behind the carousel so it pre-loads tiles & canal data */}
+          <div
+            style={{
+              position: 'fixed', inset: 0, zIndex: 1,
+              visibility: 'hidden', pointerEvents: 'none',
+            }}
+            aria-hidden="true"
+          >
+            <MapScreen />
+          </div>
+          <WelcomeCarousel onDismiss={() => setShowCarousel(false)} />
+        </>
+      )}
+
+      <Routes>
+        {/* Public / auth */}
       <Route path="/" element={user ? <Navigate to="/map" replace /> : <SplashScreen />} />
       <Route path="/auth" element={<AuthScreen />} />
 
@@ -95,7 +122,8 @@ export default function App() {
         <Route path="/me" element={<ProfileScreen />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }

@@ -272,19 +272,19 @@ export default function MapScreen() {
   const [searchResults, setSearchResults] = useState([]);
   const [flyTarget, setFlyTarget] = useState(null);
   const [filters, setFilters] = useState({ hazards: true, friends: true, services: true, logbook: false });
-  // Restore last view from localStorage so we don't always recenter on Birmingham
+  // Restore last view from localStorage — default to Victoria Park / Regent's Canal, London
   const [mapCenter, setMapCenter] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('waterline_map_view') || 'null');
       if (saved?.center) return saved.center;
     } catch {}
-    return [52.5, -1.8];
+    return [51.537, -0.036]; // Victoria Park — Regent's Canal, East London
   });
   const initialZoom = (() => {
     try {
       const saved = JSON.parse(localStorage.getItem('waterline_map_view') || 'null');
-      return saved?.zoom ?? 9;
-    } catch { return 9; }
+      return saved?.zoom ?? 14;
+    } catch { return 14; }
   })();
   const [mapZoom, setMapZoom] = useState(initialZoom);
   const [bboxKey, setBboxKey] = useState(null);
@@ -299,6 +299,7 @@ export default function MapScreen() {
   const [canalFilters, setCanalFilters] = useState(
     Object.fromEntries(Object.keys(FEATURE_META).map(k => [k, k === 'lock' || k === 'water']))
   );
+  const [canalLoading, setCanalLoading] = useState(false);
   const [canalPanelOpen, setCanalPanelOpen] = useState(false);
   const [myMapsPins, setMyMapsPins] = useState(() => {
     try {
@@ -636,6 +637,7 @@ out center geom qt;`;
     }
 
     // 2) Fetch any missing cells (debounced)
+    setCanalLoading(true);
     clearTimeout(overpassTimeout.current);
     overpassTimeout.current = setTimeout(async () => {
       const results = await Promise.all(missing.map(([a, b, c, d]) =>
@@ -647,6 +649,7 @@ out center geom qt;`;
       }
       setWaterwayLines(finalLines);
       setCanalFeatures(finalPts);
+      setCanalLoading(false);
       schedulePrefetch();
     }, 200);
 
@@ -926,6 +929,24 @@ out center geom qt;`;
           textAlign: 'center', boxShadow: 'var(--sh-2)',
         }}>
           Drag any orange dot along the canal to choose a different route. Tap <strong>Done</strong> when finished.
+        </div>
+      )}
+
+      {/* Canal data loading toast — bottom of screen, unobtrusive */}
+      {canalLoading && !routingLoading && (
+        <div style={{
+          position: 'absolute', bottom: 88, left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1001,
+          background: 'rgba(26,107,90,0.92)', color: '#fff',
+          borderRadius: 24, padding: '9px 18px',
+          fontSize: 13, fontWeight: 500,
+          display: 'flex', alignItems: 'center', gap: 0,
+          boxShadow: 'var(--sh-2)', whiteSpace: 'nowrap',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <span className="wl-spinner" />
+          Loading waterway data…
         </div>
       )}
 
