@@ -268,6 +268,7 @@ export default function MapScreen() {
   const nav = useNavigate();
   const routeLocation = useLocation();
   const [hazards, setHazards] = useState([]);
+  const [friends, setFriends] = useState([]);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [flyTarget, setFlyTarget] = useState(null);
@@ -342,6 +343,11 @@ export default function MapScreen() {
     api.listHazards({ minLat: 50, maxLat: 55, minLng: -4, maxLng: 2 })
       .then(setHazards).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    api.myFriends().then(data => setFriends(Array.isArray(data) ? data : [])).catch(() => {});
+  }, [user]);
 
   useEffect(() => {
     if (!user?.boatId) return;
@@ -779,6 +785,19 @@ out center geom qt;`;
           </Marker>
         ))}
 
+        {/* Friend mooring pins */}
+        {filters.friends && friends
+          .filter(f => f.mooringLat && f.mooringLng)
+          .map(f => (
+            <Marker
+              key={`friend-${f._id}`}
+              position={[f.mooringLat, f.mooringLng]}
+              icon={makeAvatarPinIcon({ photoUrl: f.profilePhotoUrl, name: f.displayName || f.username })}
+              eventHandlers={{ click: () => setSelectedPin({ kind: 'friend', ...f }) }}
+            />
+          ))
+        }
+
         {/* Hazard circles */}
         {visibleHazards.map(h => (
           <Marker key={h._id} position={[h.lat, h.lng]} icon={makeHazardIcon(h.severity)}
@@ -1093,6 +1112,7 @@ out center geom qt;`;
       <BottomSheet open={!!selectedPin} onClose={() => setSelectedPin(null)}>
         {selectedPin?.kind === 'hazard' && <HazardSheet pin={selectedPin} onClose={() => setSelectedPin(null)} />}
         {selectedPin?.kind === 'logbook' && <LogbookSheet pin={selectedPin} onClose={() => setSelectedPin(null)} />}
+        {selectedPin?.kind === 'friend' && <FriendSheet friend={selectedPin} onClose={() => setSelectedPin(null)} />}
       </BottomSheet>
     </div>
   );
@@ -1161,6 +1181,52 @@ function HazardSheet({ pin, onClose }) {
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
         <button onClick={onClose} className="btn ghost" style={{ flex: 1 }}>Close</button>
         <button onClick={() => navigate(`/hazard/${pin._id}`, { state: { hazard: pin } })} className="btn primary" style={{ flex: 1 }}>View details</button>
+      </div>
+    </div>
+  );
+}
+
+function FriendSheet({ friend, onClose }) {
+  const navigate = useNavigate();
+  const initial = (friend.displayName || friend.username || '?').charAt(0).toUpperCase();
+  return (
+    <div style={{ padding: '8px 22px 22px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {/* Avatar */}
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%', overflow: 'hidden',
+            border: '2px solid var(--reed)', flexShrink: 0,
+            background: 'var(--moss)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {friend.profilePhotoUrl
+              ? <img src={friend.profilePhotoUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+              : <span style={{ color: '#fff', fontWeight: 700, fontSize: 22 }}>{initial}</span>
+            }
+          </div>
+          <div>
+            <div style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.2 }}>{friend.displayName || 'Boater'}</div>
+            {friend.username && <div style={{ fontSize: 13, color: 'var(--silt)', marginTop: 2 }}>@{friend.username}</div>}
+            {friend.mooringLocation && (
+              <div style={{ fontSize: 13, color: 'var(--pebble)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Icon name="pin" size={13} color="var(--pebble)" /> {friend.mooringLocation}
+              </div>
+            )}
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 0, padding: 4, cursor: 'pointer', color: 'var(--silt)' }}>
+          <Icon name="close" size={20} />
+        </button>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={onClose} className="btn ghost" style={{ flex: 1 }}>Close</button>
+        <button
+          onClick={() => { onClose(); navigate(`/profile/${friend._id}`); }}
+          className="btn primary"
+          style={{ flex: 1 }}
+        >
+          View profile
+        </button>
       </div>
     </div>
   );

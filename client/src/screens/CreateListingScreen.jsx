@@ -191,7 +191,7 @@ export default function CreateListingScreen() {
         <div style={{ width: 24 }} />
       </div>
 
-      <div className="scroll" style={{ padding: editId ? '20px 20px 40px' : '20px 20px 120px' }}>
+      <div className="scroll" style={{ padding: '20px 20px 28px', background: 'var(--paper)' }}>
         {/* What are you adding? */}
         <div style={{ marginBottom: 20 }}>
           <div className="label">What are you adding?</div>
@@ -427,10 +427,10 @@ export default function CreateListingScreen() {
         )}
       </div>
 
-      {/* Create mode: fixed bottom bar */}
+      {/* Create mode: bottom bar locked to screen bottom as a flex item */}
       {!editId && (
         <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
+          flexShrink: 0,
           padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))',
           background: 'var(--paper)', borderTop: '1px solid var(--reed)',
           display: 'flex', gap: 12,

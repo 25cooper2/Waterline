@@ -85,7 +85,7 @@ export default function ProfileScreen() {
         </button>
       </div>
 
-      <div className="scroll">
+      <div className="scroll" style={{ background: 'var(--paper)' }}>
         {/* Profile header */}
         <div style={{
           padding: '24px 20px',
