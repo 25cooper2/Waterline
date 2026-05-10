@@ -99,6 +99,7 @@ export default function App() {
       <Route path="/market/new" element={<CreateListingScreen />} />
       <Route path="/market/edit/:id" element={<CreateListingScreen />} />
       <Route path="/inbox/:threadId" element={<MessageThreadScreen />} />
+      <Route path="/inbox/listing/:listingId/:threadId" element={<MessageThreadScreen />} />
       <Route path="/hazard/:id" element={<HazardDetailScreen />} />
       <Route path="/report-hazard" element={<ReportHazardScreen />} />
       <Route path="/settings" element={<SettingsScreen />} />

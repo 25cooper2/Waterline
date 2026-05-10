@@ -56,7 +56,10 @@ export const api = {
   sendMessage: (body) => req('/api/messages', { method: 'POST', body: JSON.stringify(body) }),
   sendHail: (body) => req('/api/messages/hail', { method: 'POST', body: JSON.stringify(body) }),
   inbox: (params = {}) => req(`/api/messages?${new URLSearchParams(params)}`),
-  conversation: (userId) => req(`/api/messages/conversation/${userId}`),
+  conversation: (userId, params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return req(`/api/messages/conversation/${userId}${qs ? `?${qs}` : ''}`);
+  },
   markRead: (id) => req(`/api/messages/${id}/read`, { method: 'PUT' }),
 
   // Hazards

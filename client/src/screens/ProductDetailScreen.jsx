@@ -302,7 +302,7 @@ export default function ProductDetailScreen() {
             </button>
             <button
               className="btn primary block"
-              onClick={() => { if (seller._id) nav(`/inbox/${seller._id}`, { state: { listingId: product._id } }); }}
+              onClick={() => { if (seller._id) nav(`/inbox/listing/${product._id}/${seller._id}`); }}
             >
               Message seller
             </button>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
@@ -34,18 +34,23 @@ function groupByDate(msgs) {
 }
 
 export default function MessageThreadScreen() {
-  const { threadId } = useParams();
+  const { threadId, listingId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  const listingId = location.state?.listingId || null;
   const { user } = useAuth();
   const scrollRef = useRef(null);
 
   const [messages, setMessages] = useState([]);
   const [otherUser, setOtherUser] = useState(null);
+  const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+
+  // Fetch the listing details when this is a listing-tied thread
+  useEffect(() => {
+    if (!listingId) { setListing(null); return; }
+    api.getProduct(listingId).then(p => setListing(p)).catch(() => {});
+  }, [listingId]);
 
   // Load the other person's profile so we always have their name/photo,
   // even if there are no messages yet (fresh conversation from "Message seller")
@@ -59,7 +64,7 @@ export default function MessageThreadScreen() {
   useEffect(() => {
     if (!user || !threadId) return;
     setLoading(true);
-    api.conversation(threadId)
+    api.conversation(threadId, listingId ? { listingId } : {})
       .then(data => {
         const msgs = Array.isArray(data) ? data : data.messages || [];
         setMessages(msgs.map(m => ({
@@ -76,7 +81,7 @@ export default function MessageThreadScreen() {
       })
       .catch(() => setMessages([]))
       .finally(() => setLoading(false));
-  }, [threadId, user]);
+  }, [threadId, listingId, user]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -110,7 +115,7 @@ export default function MessageThreadScreen() {
 
     try {
       await api.sendMessage({ recipientId: threadId, body, ...(listingId ? { listingId } : {}) });
-      const data = await api.conversation(threadId);
+      const data = await api.conversation(threadId, listingId ? { listingId } : {});
       const msgs = Array.isArray(data) ? data : data.messages || [];
       if (msgs.length > 0) {
         setMessages(msgs.map(m => ({
@@ -164,6 +169,40 @@ export default function MessageThreadScreen() {
           <Icon name="me" size={20} />
         </button>
       </div>
+
+      {/* Listing context banner — only shown in listing-tied threads */}
+      {listing && (
+        <div
+          onClick={() => navigate(`/market/product/${listing._id}`)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '10px 14px', background: 'var(--paper)',
+            borderBottom: '1px solid var(--reed)', cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{
+            width: 44, height: 44, borderRadius: 'var(--r-sm)',
+            background: listing.images?.[0] ? `url(${listing.images[0]}) center/cover no-repeat` : 'var(--linen)',
+            flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {!listing.images?.[0] && <Icon name="market" size={20} color="var(--pebble)" />}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              color: 'var(--moss)', marginBottom: 2,
+            }}>About listing</div>
+            <div className="truncate" style={{ fontWeight: 600, fontSize: 14 }}>{listing.title}</div>
+            <div style={{ fontSize: 13, color: 'var(--moss)', fontWeight: 600 }}>
+              {listing.price === 0 ? 'Free' : `£${listing.price?.toLocaleString()}`}
+            </div>
+          </div>
+          <Icon name="chevron" size={18} color="var(--pebble)" />
+        </div>
+      )}
 
       {/* Chat area */}
       <div

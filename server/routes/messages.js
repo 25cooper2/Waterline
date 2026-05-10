@@ -98,6 +98,7 @@ router.get('/', authMiddleware, async (req, res) => {
     const messages = await Message.find(filter)
       .populate('senderId', 'displayName username profilePhotoUrl')
       .populate('recipientId', 'displayName username profilePhotoUrl')
+      .populate('listingId', 'title images price')
       .sort({ createdAt: -1 })
       .exec();
 
@@ -111,15 +112,28 @@ router.get('/', authMiddleware, async (req, res) => {
 router.get('/conversation/:otherUserId', authMiddleware, async (req, res) => {
   try {
     const { otherUserId } = req.params;
+    const { listingId } = req.query;
 
-    const messages = await Message.find({
+    const filter = {
       $or: [
         { senderId: req.user.userId, recipientId: otherUserId },
         { senderId: otherUserId, recipientId: req.user.userId }
-      ]
-    })
+      ],
+    };
+
+    // Listing threads are isolated from pure DMs even between the same two users.
+    // - listingId=<id>: only messages tied to that listing
+    // - no listingId: only pure DMs (where listingId is null/unset)
+    if (listingId) {
+      filter.listingId = listingId;
+    } else {
+      filter.$and = [{ $or: [{ listingId: null }, { listingId: { $exists: false } }] }];
+    }
+
+    const messages = await Message.find(filter)
       .populate('senderId', 'displayName username profilePhotoUrl')
       .populate('recipientId', 'displayName username profilePhotoUrl')
+      .populate('listingId', 'title images price')
       .sort({ createdAt: 1 })
       .exec();
 
