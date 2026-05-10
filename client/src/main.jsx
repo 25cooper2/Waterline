@@ -5,6 +5,13 @@ import { AuthProvider } from './AuthContext';
 import App from './App';
 import './tokens.css';
 
+// Capture the PWA install prompt as early as possible — it fires before React mounts
+window.__pwaInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.__pwaInstallPrompt = e;
+});
+
 function Root() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
 

@@ -39,10 +39,14 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+html {
+  background: var(--moss);
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background: var(--paper);
+  background: var(--moss);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -52,8 +56,8 @@ body {
 /* App shell */
 .app-shell {
   max-width: 480px;
-  height: 100dvh;
-  margin: 0 auto;
+  height: calc(100dvh - env(safe-area-inset-top));
+  margin: env(safe-area-inset-top) auto 0;
   display: flex;
   flex-direction: column;
   background: var(--paper);
