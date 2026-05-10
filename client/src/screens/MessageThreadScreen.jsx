@@ -6,14 +6,6 @@ import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 import Plate from '../components/Plate';
 
-/* -- Mock data used as fallback when conversation API returns empty -- */
-const MOCK_MESSAGES = [
-  { _id: 'mock-1', body: 'Hey, saw you moored up at Braunston. Nice boat!', createdAt: new Date(Date.now() - 3600000 * 2).toISOString(), fromMe: false },
-  { _id: 'mock-2', body: 'Thanks! We just got through the tunnel this morning. Beautiful stretch.', createdAt: new Date(Date.now() - 3600000 * 1.5).toISOString(), fromMe: true },
-  { _id: 'mock-3', body: 'Heading that way tomorrow. Any tips on the moorings past the junction?', createdAt: new Date(Date.now() - 3600000).toISOString(), fromMe: false },
-  { _id: 'mock-4', body: 'The visitor moorings just past the marina are great. 48hr limit but plenty of space mid-week.', createdAt: new Date(Date.now() - 1800000).toISOString(), fromMe: true },
-];
-
 function formatTime(date) {
   return new Date(date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
@@ -53,50 +45,47 @@ export default function MessageThreadScreen() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
 
+  // Load the other person's profile so we always have their name/photo,
+  // even if there are no messages yet (fresh conversation from "Message seller")
+  useEffect(() => {
+    if (!threadId) return;
+    api.getPublicProfile(threadId).then(p => {
+      if (p) setOtherUser(p);
+    }).catch(() => {});
+  }, [threadId]);
+
   useEffect(() => {
     if (!user || !threadId) return;
     setLoading(true);
-
     api.conversation(threadId)
       .then(data => {
         const msgs = Array.isArray(data) ? data : data.messages || [];
+        setMessages(msgs.map(m => ({
+          ...m,
+          fromMe: (m.senderId?._id || m.senderId) === user._id,
+        })));
+        // If messages exist, use the sender info to fill in otherUser details
         if (msgs.length > 0) {
-          /* Determine which messages are from the current user */
-          const normalised = msgs.map(m => ({
-            ...m,
-            fromMe: (m.senderId?._id || m.senderId) === user._id,
-          }));
-          setMessages(normalised);
-
-          /* Figure out the other participant */
           const firstOther = msgs.find(m => (m.senderId?._id || m.senderId) !== user._id);
           if (firstOther?.senderId && typeof firstOther.senderId === 'object') {
-            setOtherUser(firstOther.senderId);
-          } else if (firstOther?.recipientId && typeof firstOther.recipientId === 'object') {
-            setOtherUser(firstOther.recipientId);
+            setOtherUser(prev => prev || firstOther.senderId);
           }
-        } else {
-          setMessages(MOCK_MESSAGES);
         }
       })
-      .catch(() => {
-        setMessages(MOCK_MESSAGES);
-      })
+      .catch(() => setMessages([]))
       .finally(() => setLoading(false));
   }, [threadId, user]);
 
-  /* Scroll to bottom when messages change */
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, loading]);
 
-  /* Mark messages as read */
   useEffect(() => {
     if (!user) return;
     messages.forEach(m => {
-      if (!m.fromMe && !m.isRead && m._id && !m._id.startsWith('mock')) {
+      if (!m.fromMe && !m.isRead && m._id) {
         api.markRead(m._id).catch(() => {});
       }
     });
@@ -108,7 +97,6 @@ export default function MessageThreadScreen() {
     const body = text.trim();
     setText('');
 
-    /* Optimistic local message */
     const optimistic = {
       _id: `local-${Date.now()}`,
       body,
@@ -120,7 +108,6 @@ export default function MessageThreadScreen() {
 
     try {
       await api.sendMessage({ recipientId: threadId, body });
-      /* Refresh full conversation */
       const data = await api.conversation(threadId);
       const msgs = Array.isArray(data) ? data : data.messages || [];
       if (msgs.length > 0) {
@@ -130,7 +117,7 @@ export default function MessageThreadScreen() {
         })));
       }
     } catch {
-      /* keep optimistic message */
+      // keep optimistic message visible so they know it was typed
     } finally {
       setSending(false);
     }
@@ -144,85 +131,61 @@ export default function MessageThreadScreen() {
   };
 
   const displayName = otherUser?.displayName || 'Boater';
-  const plate = otherUser?.boat?.boatIndexNumber || otherUser?.boatIndexNumber;
-  const product = messages.find(m => m.product || m.productId)?.product;
+  const plate = otherUser?.boatIndexNumber;
   const dateGroups = groupByDate(messages);
 
   return (
     <div className="screen" style={{ background: 'var(--linen)' }}>
-      {/* ====== App bar ====== */}
+      {/* App bar */}
       <div className="appbar" style={{ gap: 10, padding: '0 12px 0 6px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
           <button
-            onClick={() => navigate('/inbox')}
+            onClick={() => navigate(-1)}
             style={{ background: 'none', border: 0, padding: 6, cursor: 'pointer', color: 'var(--ink)', display: 'flex' }}
             aria-label="Back"
           >
             <Icon name="back" />
           </button>
-          <Avatar name={displayName} size={34} />
+          <Avatar name={displayName} src={otherUser?.profilePhotoUrl} size={34} />
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontWeight: 600, fontSize: 15 }}>{displayName}</span>
               {plate && <Plate>{plate}</Plate>}
             </div>
-            {otherUser?.distance && (
-              <div style={{ fontSize: 12, color: 'var(--silt)' }}>{otherUser.distance}</div>
-            )}
           </div>
         </div>
         <button
+          onClick={() => navigate(`/profile/${threadId}`)}
           style={{ background: 'none', border: 0, padding: 6, cursor: 'pointer', color: 'var(--ink)', display: 'flex' }}
-          aria-label="More"
+          aria-label="View profile"
         >
-          <Icon name="more" />
+          <Icon name="me" size={20} />
         </button>
       </div>
 
-      {/* ====== Context banner (product card) ====== */}
-      {product && (
-        <div style={{
-          margin: '0 12px', padding: '10px 14px',
-          background: 'var(--paper)', borderRadius: 'var(--r-md)',
-          border: '1px solid var(--reed)',
-          display: 'flex', alignItems: 'center', gap: 12,
-          flexShrink: 0,
-        }}>
-          {product.image && (
-            <img
-              src={product.image}
-              alt=""
-              style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover' }}
-            />
-          )}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="truncate" style={{ fontWeight: 600, fontSize: 14 }}>{product.title}</div>
-            {product.price != null && (
-              <div style={{ fontSize: 13, color: 'var(--moss)', fontWeight: 600 }}>
-                {typeof product.price === 'number' ? `£${product.price}` : product.price}
-              </div>
-            )}
-          </div>
-          <Icon name="chevron" size={18} color="var(--pebble)" />
-        </div>
-      )}
-
-      {/* ====== Chat area ====== */}
+      {/* Chat area */}
       <div
         ref={scrollRef}
         className="scroll"
         style={{ padding: '16px 14px 8px', background: 'var(--linen)' }}
       >
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--silt)' }}>Loading...</div>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--silt)' }}>Loading…</div>
+        ) : messages.length === 0 ? (
+          <div style={{ padding: '60px 24px', textAlign: 'center', color: 'var(--silt)' }}>
+            <Avatar name={displayName} src={otherUser?.profilePhotoUrl} size={64} />
+            <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--ink)', marginTop: 14 }}>{displayName}</div>
+            {plate && <div style={{ marginTop: 4 }}><Plate>{plate}</Plate></div>}
+            <p style={{ fontSize: 14, marginTop: 12, lineHeight: 1.5, maxWidth: 260, margin: '12px auto 0' }}>
+              No messages yet. Send a message to start the conversation.
+            </p>
+          </div>
         ) : (
           dateGroups.map((group, gi) => (
             <div key={gi}>
-              {/* Date header */}
               <div style={{
                 textAlign: 'center', margin: '16px 0 12px',
                 fontSize: 12, fontWeight: 600, color: 'var(--silt)',
-                letterSpacing: '0.02em',
               }}>
                 <span style={{
                   background: 'rgba(228,222,207,0.7)',
@@ -232,20 +195,15 @@ export default function MessageThreadScreen() {
                 </span>
               </div>
 
-              {/* Bubbles */}
               {group.messages.map((msg, mi) => {
                 const isMe = msg.fromMe;
                 const nextMsg = group.messages[mi + 1];
                 const sameSenderNext = nextMsg && nextMsg.fromMe === isMe;
-                /* Show time after last message in a consecutive run from the same sender */
                 const showTime = !sameSenderNext;
 
                 return (
                   <div key={msg._id} style={{ marginBottom: showTime ? 12 : 3 }}>
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: isMe ? 'flex-end' : 'flex-start',
-                    }}>
+                    <div style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
                       <div style={{
                         maxWidth: '78%',
                         padding: '10px 14px',
@@ -254,16 +212,13 @@ export default function MessageThreadScreen() {
                         background: isMe ? 'var(--moss)' : 'var(--paper)',
                         color: isMe ? '#fff' : 'var(--ink)',
                         border: isMe ? 'none' : '1px solid var(--reed)',
-                        borderRadius: isMe
-                          ? '18px 18px 4px 18px'
-                          : '18px 18px 18px 4px',
+                        borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                         boxShadow: 'var(--sh-1)',
                         wordBreak: 'break-word',
                       }}>
                         {msg.body}
                       </div>
                     </div>
-
                     {showTime && (
                       <div style={{
                         textAlign: isMe ? 'right' : 'left',
@@ -283,7 +238,7 @@ export default function MessageThreadScreen() {
         )}
       </div>
 
-      {/* ====== Bottom composer ====== */}
+      {/* Composer */}
       <div style={{
         display: 'flex', alignItems: 'flex-end', gap: 8,
         padding: '10px 12px',
@@ -292,23 +247,11 @@ export default function MessageThreadScreen() {
         borderTop: '1px solid var(--reed)',
         flexShrink: 0,
       }}>
-        <button
-          style={{
-            width: 40, height: 40, borderRadius: '50%',
-            background: 'var(--linen)', border: '1px solid var(--reed)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', flexShrink: 0, color: 'var(--silt)',
-          }}
-          aria-label="Attach"
-        >
-          <Icon name="plus" size={20} />
-        </button>
-
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message..."
+          placeholder={`Message ${displayName}…`}
           rows={1}
           style={{
             flex: 1, resize: 'none',
@@ -328,15 +271,14 @@ export default function MessageThreadScreen() {
             e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
           }}
         />
-
         <button
           onClick={handleSend}
-          disabled={!text.trim()}
+          disabled={!text.trim() || sending}
           className="btn primary"
           style={{
             width: 40, height: 40, padding: 0,
             borderRadius: '50%', flexShrink: 0,
-            opacity: text.trim() ? 1 : 0.4,
+            opacity: text.trim() && !sending ? 1 : 0.4,
           }}
           aria-label="Send"
         >
