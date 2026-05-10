@@ -25,7 +25,8 @@ export default function ProductDetailScreen() {
   const [error, setError] = useState('');
   const [userLoc, setUserLoc] = useState(() => getCachedLocation());
   const [imgIndex, setImgIndex] = useState(0);
-  const viewRecordedRef = useRef(false); // prevent double-recording on strict mode mount
+  const viewRecordedRef = useRef(false);
+  const touchX = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -106,7 +107,6 @@ export default function ProductDetailScreen() {
   const images = product.images || [];
   const currentImg = images[imgIndex];
 
-  const touchX = useRef(null);
   const handleTouchStart = (e) => { touchX.current = e.touches[0].clientX; };
   const handleTouchEnd = (e) => {
     if (touchX.current === null || images.length < 2) return;
