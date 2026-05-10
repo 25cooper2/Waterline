@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
@@ -229,40 +229,72 @@ export default function MarketScreen() {
 }
 
 function ProductCard({ product, onClick, distance }) {
-  const img = product.images?.[0];
-  const nav = useNavigate();
-  const sellerId = product.sellerId?._id || product.sellerId;
+  const images = product.images || [];
+  const [imgIdx, setImgIdx] = useState(0);
+  const touchX = useRef(null);
+  const img = images[imgIdx] || images[0];
+
+  const handleTouchStart = (e) => { touchX.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e) => {
+    if (touchX.current === null || images.length < 2) return;
+    const diff = touchX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) {
+      setImgIdx(i => (i + (diff > 0 ? 1 : -1) + images.length) % images.length);
+    }
+    touchX.current = null;
+  };
+
+  const desc = product.description;
+  const descPreview = desc
+    ? (desc.length > 72 ? desc.slice(0, 72).trimEnd() + '…' : desc)
+    : null;
+
   return (
     <div className="card" style={{ cursor: 'pointer', position: 'relative' }} onClick={onClick}>
-      <div style={{
-        height: 130, overflow: 'hidden', borderRadius: 'var(--r-md) var(--r-md) 0 0',
-        background: img ? `url(${img}) center/cover no-repeat` : 'var(--linen)',
-        display: img ? 'block' : 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
+      <div
+        style={{
+          height: 130, overflow: 'hidden', borderRadius: 'var(--r-md) var(--r-md) 0 0',
+          background: img ? `url(${img}) center/cover no-repeat` : 'var(--linen)',
+          display: img ? 'block' : 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative',
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {!img && <Icon name="market" size={36} color="var(--pebble)" />}
+        {images.length > 1 && (
+          <div style={{
+            position: 'absolute', bottom: 6, left: 0, right: 0,
+            display: 'flex', justifyContent: 'center', gap: 4,
+          }}>
+            {images.map((_, i) => (
+              <div key={i} style={{
+                width: i === imgIdx ? 14 : 5, height: 5, borderRadius: 3,
+                background: i === imgIdx ? '#fff' : 'rgba(255,255,255,0.5)',
+                transition: 'width 0.15s',
+              }} />
+            ))}
+          </div>
+        )}
       </div>
       <div style={{ padding: '10px 12px 12px' }}>
-        <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.3, marginBottom: 6 }} className="truncate">
+        <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.3, marginBottom: 4 }} className="truncate">
           {product.title}
         </div>
+        {descPreview && (
+          <div style={{ fontSize: 12, color: 'var(--silt)', lineHeight: 1.4, marginBottom: 6 }}>
+            {descPreview}
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--moss)' }}>
             {product.price === 0 ? 'Free' : `£${product.price?.toLocaleString()}`}
           </span>
         </div>
         {distance && (
-          <div style={{ fontSize: 12, color: 'var(--pebble)', marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: 'var(--pebble)', marginTop: 4 }}>
             {distance}
           </div>
-        )}
-        {sellerId && (
-          <button
-            onClick={(e) => { e.stopPropagation(); nav(`/inbox?to=${sellerId}`); }}
-            className="btn ghost"
-            style={{ marginTop: 8, width: '100%', height: 32, fontSize: 13, gap: 6 }}
-          >
-            <Icon name="inbox" size={14} /> Contact
-          </button>
         )}
       </div>
     </div>

@@ -6,9 +6,13 @@ import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 import Plate from '../components/Plate';
 
-function UserRow({ person, isFollowing, onToggle, loading }) {
+function UserRow({ person, actionLabel, onAction, loading, onClick }) {
   return (
-    <div className="row" style={{ padding: '12px 20px', gap: 12 }}>
+    <div
+      className="row"
+      style={{ padding: '12px 20px', gap: 12, cursor: 'pointer' }}
+      onClick={onClick}
+    >
       <Avatar name={person.displayName} src={person.profilePhotoUrl} size={46} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -19,14 +23,16 @@ function UserRow({ person, isFollowing, onToggle, loading }) {
           <div className="muted truncate" style={{ fontSize: 13, marginTop: 2 }}>{person.location}</div>
         )}
       </div>
-      <button
-        className={`btn ${isFollowing ? 'ghost' : 'primary'}`}
-        style={{ height: 34, fontSize: 13, padding: '0 14px', flexShrink: 0 }}
-        onClick={() => onToggle(person._id)}
-        disabled={loading}
-      >
-        {isFollowing ? 'Following' : 'Follow'}
-      </button>
+      {actionLabel && (
+        <button
+          className="btn ghost"
+          style={{ height: 34, fontSize: 13, padding: '0 14px', flexShrink: 0 }}
+          onClick={(e) => { e.stopPropagation(); onAction(person._id); }}
+          disabled={loading}
+        >
+          {loading ? '…' : actionLabel}
+        </button>
+      )}
     </div>
   );
 }
@@ -34,9 +40,11 @@ function UserRow({ person, isFollowing, onToggle, loading }) {
 export default function FriendsScreen() {
   const { user } = useAuth();
   const nav = useNavigate();
-  const [tab, setTab] = useState('following');
+  const [tab, setTab] = useState('friends');
+  const [friendsList, setFriendsList] = useState([]);
   const [followingList, setFollowingList] = useState([]);
   const [followersList, setFollowersList] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
   const [followingIds, setFollowingIds] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [toggling, setToggling] = useState(null);
@@ -44,17 +52,21 @@ export default function FriendsScreen() {
   const loadData = useCallback(async () => {
     if (!user?._id) return;
     try {
-      const [fing, fers] = await Promise.all([
-        api.following(user._id),
-        api.followers(user._id),
+      const [friends, fing, fers, reqs] = await Promise.all([
+        api.myFriends().catch(() => []),
+        api.following(user._id).catch(() => []),
+        api.followers(user._id).catch(() => []),
+        api.myFriendRequests().catch(() => []),
       ]);
+      setFriendsList(Array.isArray(friends) ? friends : []);
       const followingArr = Array.isArray(fing) ? fing : fing.users || [];
       const followersArr = Array.isArray(fers) ? fers : fers.users || [];
       setFollowingList(followingArr);
       setFollowersList(followersArr);
       setFollowingIds(new Set(followingArr.map(u => u._id)));
+      setPendingRequests(Array.isArray(reqs) ? reqs : []);
     } catch (e) {
-      console.error('Failed to load friends', e);
+      console.error('Failed to load data', e);
     }
   }, [user?._id]);
 
@@ -79,15 +91,39 @@ export default function FriendsScreen() {
     }
   };
 
+  const acceptRequest = async (senderId) => {
+    setToggling(senderId);
+    try {
+      await api.acceptFriendRequest(senderId);
+      await loadData();
+    } catch (e) {
+      console.error('Accept failed', e);
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  const declineRequest = async (senderId) => {
+    setToggling(senderId);
+    try {
+      await api.declineFriendRequest(senderId);
+      setPendingRequests(prev => prev.filter(r => r.sender._id !== senderId));
+    } catch (e) {
+      console.error('Decline failed', e);
+    } finally {
+      setToggling(null);
+    }
+  };
+
   const filteredFollowers = followersList.filter(p =>
     !searchQuery || p.displayName?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
   const filteredFollowing = followingList.filter(p =>
     !searchQuery || p.displayName?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
   const suggestions = followersList.filter(p => !followingIds.has(p._id));
+
+  const goToProfile = (id) => { if (id) nav(`/profile/${id}`); };
 
   return (
     <div className="screen">
@@ -95,30 +131,61 @@ export default function FriendsScreen() {
         <button className="btn text" style={{ padding: '8px 0' }} onClick={() => nav('/me')}>
           <Icon name="back" size={22} color="var(--ink)" />
         </button>
-        <h1 style={{ flex: 1 }}>Friends</h1>
+        <h1 style={{ flex: 1 }}>Friends &amp; Following</h1>
         <button className="btn text" style={{ padding: '8px 0' }} onClick={() => nav('/settings/privacy')}>
           <Icon name="settings" size={22} color="var(--ink)" />
         </button>
       </div>
 
+      {/* Pending friend requests banner */}
+      {pendingRequests.length > 0 && (
+        <div style={{ padding: '12px 20px', background: 'var(--moss-soft)', borderBottom: '1px solid rgba(26,107,90,0.15)' }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--moss-dark)', marginBottom: 8 }}>
+            Friend requests ({pendingRequests.length})
+          </div>
+          {pendingRequests.map(req => (
+            <div key={req._id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <Avatar name={req.sender.displayName} src={req.sender.profilePhotoUrl} size={36} />
+              <div
+                style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+                onClick={() => goToProfile(req.sender._id)}
+              >
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{req.sender.displayName || 'Boater'}</div>
+                <div style={{ fontSize: 12, color: 'var(--silt)' }}>wants to be your friend</div>
+              </div>
+              <button
+                className="btn primary"
+                style={{ height: 30, padding: '0 12px', fontSize: 12, flexShrink: 0 }}
+                onClick={() => acceptRequest(req.sender._id)}
+                disabled={toggling === req.sender._id}
+              >
+                Accept
+              </button>
+              <button
+                className="btn ghost"
+                style={{ height: 30, padding: '0 10px', fontSize: 12, flexShrink: 0 }}
+                onClick={() => declineRequest(req.sender._id)}
+                disabled={toggling === req.sender._id}
+              >
+                Decline
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Filter chips */}
-      <div style={{ display: 'flex', gap: 8, padding: '12px 20px', borderBottom: '1px solid var(--reed)' }}>
-        <button
-          className={`chip${tab === 'following' ? ' active' : ''}`}
-          onClick={() => setTab('following')}
-        >
+      <div style={{ display: 'flex', gap: 8, padding: '12px 20px', borderBottom: '1px solid var(--reed)', overflowX: 'auto', scrollbarWidth: 'none', flexShrink: 0 }}>
+        <button className={`chip${tab === 'friends' ? ' active' : ''}`} onClick={() => setTab('friends')}>
+          Friends &middot; {friendsList.length}
+        </button>
+        <button className={`chip${tab === 'following' ? ' active' : ''}`} onClick={() => setTab('following')}>
           Following &middot; {followingList.length}
         </button>
-        <button
-          className={`chip${tab === 'followers' ? ' active' : ''}`}
-          onClick={() => setTab('followers')}
-        >
+        <button className={`chip${tab === 'followers' ? ' active' : ''}`} onClick={() => setTab('followers')}>
           Followers &middot; {followersList.length}
         </button>
-        <button
-          className={`chip${tab === 'find' ? ' active' : ''}`}
-          onClick={() => setTab('find')}
-        >
+        <button className={`chip${tab === 'find' ? ' active' : ''}`} onClick={() => setTab('find')}>
           Find
         </button>
       </div>
@@ -142,6 +209,27 @@ export default function FriendsScreen() {
           </div>
         )}
 
+        {/* Friends tab */}
+        {tab === 'friends' && (
+          friendsList.length === 0 ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+              <Icon name="friend" size={36} color="var(--pebble)" />
+              <p className="muted" style={{ marginTop: 12, fontSize: 14 }}>No friends yet. Visit someone's profile and tap Add as Friend.</p>
+            </div>
+          ) : (
+            <div>
+              {friendsList.map(person => (
+                <UserRow
+                  key={person._id}
+                  person={person}
+                  actionLabel={null}
+                  onClick={() => goToProfile(person._id)}
+                />
+              ))}
+            </div>
+          )
+        )}
+
         {/* Following tab */}
         {tab === 'following' && (
           followingList.length === 0 ? (
@@ -155,9 +243,10 @@ export default function FriendsScreen() {
                 <UserRow
                   key={person._id}
                   person={person}
-                  isFollowing={true}
-                  onToggle={toggleFollow}
+                  actionLabel="Unfollow"
+                  onAction={toggleFollow}
                   loading={toggling === person._id}
+                  onClick={() => goToProfile(person._id)}
                 />
               ))}
             </div>
@@ -177,9 +266,10 @@ export default function FriendsScreen() {
                 <UserRow
                   key={person._id}
                   person={person}
-                  isFollowing={followingIds.has(person._id)}
-                  onToggle={toggleFollow}
+                  actionLabel={followingIds.has(person._id) ? 'Unfollow' : 'Follow'}
+                  onAction={toggleFollow}
                   loading={toggling === person._id}
+                  onClick={() => goToProfile(person._id)}
                 />
               ))}
             </div>
@@ -199,9 +289,10 @@ export default function FriendsScreen() {
                 <UserRow
                   key={person._id}
                   person={person}
-                  isFollowing={followingIds.has(person._id)}
-                  onToggle={toggleFollow}
+                  actionLabel="Follow"
+                  onAction={toggleFollow}
                   loading={toggling === person._id}
+                  onClick={() => goToProfile(person._id)}
                 />
               ))
             )}

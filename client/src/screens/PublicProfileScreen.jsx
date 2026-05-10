@@ -26,6 +26,8 @@ export default function PublicProfileScreen() {
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
   const [isFollowing, setIsFollowing] = useState(false);
+  // friendStatus: 'none' | 'sent' | 'received' | 'friends'
+  const [friendStatus, setFriendStatus] = useState('none');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -40,11 +42,13 @@ export default function PublicProfileScreen() {
     Promise.all([
       api.getPublicProfile(userId).catch(() => null),
       api.listPosts({ authorId: userId, limit: 30 }).catch(() => []),
-      me ? api.isFollowing(userId).catch(() => ({ following: false })) : Promise.resolve({ following: false }),
-    ]).then(([p, ps, f]) => {
+      me ? api.isFollowing(userId).catch(() => ({ isFollowing: false })) : Promise.resolve({ isFollowing: false }),
+      me ? api.friendStatus(userId).catch(() => ({ status: 'none' })) : Promise.resolve({ status: 'none' }),
+    ]).then(([p, ps, f, fs]) => {
       setProfile(p);
       setPosts(ps || []);
-      setIsFollowing(!!f?.following);
+      setIsFollowing(!!(f?.isFollowing));
+      setFriendStatus(fs?.status || 'none');
     }).finally(() => setLoading(false));
   }, [userId, me]);
 
@@ -59,8 +63,43 @@ export default function PublicProfileScreen() {
     setBusy(false);
   };
 
-  const messageUser = () => {
-    nav(`/inbox/${userId}`);
+  const handleFriendAction = async () => {
+    setBusy(true);
+    try {
+      if (friendStatus === 'none') {
+        await api.sendFriendRequest(userId);
+        setFriendStatus('sent');
+      } else if (friendStatus === 'sent' || friendStatus === 'friends') {
+        await api.removeFriend(userId);
+        setFriendStatus('none');
+      }
+    } catch (e) { alert(e.message); }
+    setBusy(false);
+  };
+
+  const acceptFriend = async () => {
+    setBusy(true);
+    try {
+      await api.acceptFriendRequest(userId);
+      setFriendStatus('friends');
+    } catch (e) { alert(e.message); }
+    setBusy(false);
+  };
+
+  const declineFriend = async () => {
+    setBusy(true);
+    try {
+      await api.declineFriendRequest(userId);
+      setFriendStatus('none');
+    } catch (e) { alert(e.message); }
+    setBusy(false);
+  };
+
+  const friendButtonLabel = () => {
+    if (busy) return '…';
+    if (friendStatus === 'friends') return 'Friends ✓';
+    if (friendStatus === 'sent') return 'Request sent';
+    return 'Add as friend';
   };
 
   return (
@@ -82,6 +121,37 @@ export default function PublicProfileScreen() {
           </div>
         ) : (
           <>
+            {/* Incoming friend request banner */}
+            {friendStatus === 'received' && (
+              <div style={{
+                margin: '16px 20px 0',
+                background: 'var(--moss-soft)', borderRadius: 'var(--r-md)',
+                padding: '14px 16px', border: '1px solid rgba(26,107,90,0.2)',
+              }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--moss-dark)', marginBottom: 10 }}>
+                  {profile.displayName || 'This boater'} wants to be your friend
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    className="btn primary"
+                    style={{ flex: 1, height: 38, fontSize: 13 }}
+                    onClick={acceptFriend}
+                    disabled={busy}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    className="btn ghost"
+                    style={{ flex: 1, height: 38, fontSize: 13 }}
+                    onClick={declineFriend}
+                    disabled={busy}
+                  >
+                    Decline
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div style={{ padding: '24px 20px 16px', display: 'flex', gap: 16, alignItems: 'center' }}>
               <Avatar name={profile.displayName} src={profile.profilePhotoUrl} size={72} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -95,12 +165,30 @@ export default function PublicProfileScreen() {
               </div>
             </div>
 
+            {/* Action buttons */}
             <div style={{ display: 'flex', gap: 8, padding: '0 20px 16px' }}>
-              <button onClick={toggleFollow} disabled={busy} className={`btn ${isFollowing ? 'ghost' : 'primary'}`} style={{ flex: 1 }}>
+              <button
+                onClick={toggleFollow}
+                disabled={busy}
+                className={`btn ${isFollowing ? 'ghost' : 'primary'}`}
+                style={{ flex: 1 }}
+              >
                 {busy ? '…' : isFollowing ? 'Following' : 'Follow'}
               </button>
-              <button onClick={messageUser} className="btn ghost" style={{ flex: 1 }}>
-                <Icon name="send" size={16} /> Message
+              <button
+                onClick={handleFriendAction}
+                disabled={busy || friendStatus === 'received'}
+                className={`btn ${friendStatus === 'friends' ? 'ghost' : 'ghost'}`}
+                style={{ flex: 1 }}
+              >
+                {friendButtonLabel()}
+              </button>
+              <button
+                onClick={() => nav(`/inbox/${userId}`)}
+                className="btn ghost"
+                style={{ width: 46, flexShrink: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Icon name="send" size={18} />
               </button>
             </div>
 

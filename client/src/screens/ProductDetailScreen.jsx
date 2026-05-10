@@ -106,15 +106,31 @@ export default function ProductDetailScreen() {
   const images = product.images || [];
   const currentImg = images[imgIndex];
 
+  const touchX = useRef(null);
+  const handleTouchStart = (e) => { touchX.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e) => {
+    if (touchX.current === null || images.length < 2) return;
+    const diff = touchX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) {
+      setImgIndex(i => (i + (diff > 0 ? 1 : -1) + images.length) % images.length);
+    }
+    touchX.current = null;
+  };
+
   return (
     <div className="screen">
       <div className="scroll">
         {/* Full-bleed image area */}
-        <div style={{
-          position: 'relative', height: 320,
-          background: currentImg ? `url(${currentImg}) center/cover no-repeat` : 'var(--linen)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
+        <div
+          style={{
+            position: 'relative', height: 320,
+            background: currentImg ? `url(${currentImg}) center/cover no-repeat` : 'var(--linen)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           {!currentImg && <Icon name="market" size={56} color="var(--pebble)" />}
 
           {/* Floating back button */}
@@ -166,7 +182,7 @@ export default function ProductDetailScreen() {
         </div>
 
         {/* Content */}
-        <div style={{ padding: '20px 20px 120px' }}>
+        <div style={{ padding: '20px 20px 28px' }}>
           {/* Category */}
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
@@ -255,9 +271,9 @@ export default function ProductDetailScreen() {
         </div>
       </div>
 
-      {/* Bottom bar */}
+      {/* Bottom bar — sits naturally at the bottom of the flex column */}
       <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
+        flexShrink: 0,
         padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))',
         background: 'var(--paper)', borderTop: '1px solid var(--reed)',
         display: 'flex', gap: 12, alignItems: 'center',

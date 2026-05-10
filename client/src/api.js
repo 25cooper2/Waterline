@@ -100,4 +100,13 @@ export const api = {
   following: (userId) => req(`/api/users/${userId}/following`),
   followers: (userId) => req(`/api/users/${userId}/followers`),
   isFollowing: (userId) => req(`/api/users/${userId}/is-following`),
+
+  // Friends
+  myFriends: () => req('/api/users/me/friends'),
+  myFriendRequests: () => req('/api/users/me/friend-requests'),
+  friendStatus: (userId) => req(`/api/users/${userId}/friend-status`),
+  sendFriendRequest: (userId) => req(`/api/users/${userId}/friend-request`, { method: 'POST' }),
+  acceptFriendRequest: (userId) => req(`/api/users/${userId}/friend-request/accept`, { method: 'PUT' }),
+  declineFriendRequest: (userId) => req(`/api/users/${userId}/friend-request/decline`, { method: 'PUT' }),
+  removeFriend: (userId) => req(`/api/users/${userId}/friend`, { method: 'DELETE' }),
 };
