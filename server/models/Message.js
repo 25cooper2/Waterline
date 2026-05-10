@@ -8,6 +8,7 @@ const messageSchema = new mongoose.Schema({
   recipientBoatIndexNumber: { type: String, default: null },
   subject: { type: String, default: null },
   body: { type: String, required: true },
+  listingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', default: null },
   isRead: { type: Boolean, default: false },
   readAt: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now }

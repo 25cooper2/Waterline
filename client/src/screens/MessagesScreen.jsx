@@ -22,10 +22,9 @@ function timeAgo(date) {
 }
 
 function threadKind(msgs) {
-  const last = msgs[msgs.length - 1];
-  if (last?.kind === 'official' || last?.kind === 'crt') return 'official';
-  if (last?.kind === 'hail' || last?.isHail) return 'hail';
-  if (last?.productId || last?.product) return 'market';
+  if (msgs.some(m => m.listingId)) return 'market';
+  if (msgs.some(m => m.kind === 'official' || m.kind === 'crt')) return 'official';
+  if (msgs.some(m => m.kind === 'hail' || m.isHail)) return 'hail';
   return null;
 }
 
@@ -63,7 +62,7 @@ export default function MessagesScreen() {
       if (!m.isRead && (m.senderId?._id || m.senderId) !== user._id) acc[key].unread++;
       return acc;
     }, {});
-    return Object.values(grouped).sort((a, b) => new Date(b.messages[b.messages.length - 1].createdAt) - new Date(a.messages[a.messages.length - 1].createdAt));
+    return Object.values(grouped).sort((a, b) => new Date(b.messages[0].createdAt) - new Date(a.messages[0].createdAt));
   }, [messages, user._id]);
 
   const filtered = useMemo(() => {
@@ -112,7 +111,7 @@ export default function MessagesScreen() {
           </div>
         ) : (
           filtered.map(thread => {
-            const last = thread.messages[thread.messages.length - 1];
+            const last = thread.messages[0];
             const other = thread.other;
             const name = other?.displayName || 'Unknown';
             const plate = other?.boat?.boatIndexNumber || other?.boatIndexNumber;

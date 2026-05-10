@@ -47,7 +47,7 @@ router.post('/hail', authMiddleware, async (req, res) => {
 // Send message or hail
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { recipientId, body, isHail, senderBoatIndexNumber, recipientBoatIndexNumber, subject } = req.body;
+    const { recipientId, body, isHail, senderBoatIndexNumber, recipientBoatIndexNumber, subject, listingId } = req.body;
 
     if (!recipientId || !body) {
       return res.status(400).json({ error: 'Recipient ID and message body required' });
@@ -60,7 +60,8 @@ router.post('/', authMiddleware, async (req, res) => {
       isHail: isHail || false,
       senderBoatIndexNumber: senderBoatIndexNumber || null,
       recipientBoatIndexNumber: recipientBoatIndexNumber || null,
-      subject: subject || null
+      subject: subject || null,
+      listingId: listingId || null,
     });
 
     await message.save();
@@ -76,14 +77,27 @@ router.post('/', authMiddleware, async (req, res) => {
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const { unreadOnly } = req.query;
-    const filter = { recipientId: req.user.userId };
 
+    // unreadOnly is used for the badge count — only received unread messages
     if (unreadOnly === 'true') {
-      filter.isRead = false;
+      const unread = await Message.find({ recipientId: req.user.userId, isRead: false })
+        .populate('senderId', 'displayName username profilePhotoUrl')
+        .sort({ createdAt: -1 })
+        .exec();
+      return res.json(unread);
     }
+
+    // Full inbox: include both sent and received so threads can be fully reconstructed
+    const filter = {
+      $or: [
+        { recipientId: req.user.userId },
+        { senderId: req.user.userId },
+      ],
+    };
 
     const messages = await Message.find(filter)
       .populate('senderId', 'displayName username profilePhotoUrl')
+      .populate('recipientId', 'displayName username profilePhotoUrl')
       .sort({ createdAt: -1 })
       .exec();
 

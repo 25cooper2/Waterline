@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
@@ -36,6 +36,8 @@ function groupByDate(msgs) {
 export default function MessageThreadScreen() {
   const { threadId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const listingId = location.state?.listingId || null;
   const { user } = useAuth();
   const scrollRef = useRef(null);
 
@@ -107,7 +109,8 @@ export default function MessageThreadScreen() {
     setMessages(prev => [...prev, optimistic]);
 
     try {
-      await api.sendMessage({ recipientId: threadId, body });
+      const isFirst = messages.filter(m => !m._id?.startsWith('local-')).length === 0;
+      await api.sendMessage({ recipientId: threadId, body, ...(isFirst && listingId ? { listingId } : {}) });
       const data = await api.conversation(threadId);
       const msgs = Array.isArray(data) ? data : data.messages || [];
       if (msgs.length > 0) {
