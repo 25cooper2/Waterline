@@ -47,6 +47,8 @@ export default function FriendsScreen() {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [followingIds, setFollowingIds] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
   const [toggling, setToggling] = useState(null);
 
   const loadData = useCallback(async () => {
@@ -71,6 +73,21 @@ export default function FriendsScreen() {
   }, [user?._id]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Live search when on Find tab
+  useEffect(() => {
+    if (tab !== 'find') return;
+    if (searchQuery.length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await api.searchUsers(searchQuery);
+        setSearchResults(Array.isArray(results) ? results : []);
+      } catch { setSearchResults([]); }
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, tab]);
 
   const toggleFollow = async (targetId) => {
     setToggling(targetId);
@@ -115,12 +132,6 @@ export default function FriendsScreen() {
     }
   };
 
-  const filteredFollowers = followersList.filter(p =>
-    !searchQuery || p.displayName?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  const filteredFollowing = followingList.filter(p =>
-    !searchQuery || p.displayName?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
   const suggestions = followersList.filter(p => !followingIds.has(p._id));
 
   const goToProfile = (id) => { if (id) nav(`/profile/${id}`); };
@@ -190,14 +201,14 @@ export default function FriendsScreen() {
         </button>
       </div>
 
-      <div className="scroll">
+      <div className="scroll" style={{ background: 'var(--paper)' }}>
         {/* Find tab: search input */}
         {tab === 'find' && (
-          <div style={{ padding: '16px 20px 0' }}>
+          <div style={{ padding: '16px 20px 12px' }}>
             <div style={{ position: 'relative' }}>
               <input
                 className="field"
-                placeholder="Search boaters..."
+                placeholder="Search by name or boat..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={{ paddingLeft: 36 }}
@@ -239,7 +250,7 @@ export default function FriendsScreen() {
             </div>
           ) : (
             <div>
-              {filteredFollowing.map(person => (
+              {followingList.map(person => (
                 <UserRow
                   key={person._id}
                   person={person}
@@ -262,7 +273,7 @@ export default function FriendsScreen() {
             </div>
           ) : (
             <div>
-              {filteredFollowers.map(person => (
+              {followersList.map(person => (
                 <UserRow
                   key={person._id}
                   person={person}
@@ -276,27 +287,50 @@ export default function FriendsScreen() {
           )
         )}
 
-        {/* Find tab */}
+        {/* Find tab results */}
         {tab === 'find' && (
-          <div>
-            <div className="label" style={{ padding: '16px 20px 8px' }}>Suggestions &mdash; moored nearby</div>
-            {suggestions.length === 0 ? (
+          searchQuery.length >= 2 ? (
+            searching ? (
+              <div style={{ padding: '24px 20px', textAlign: 'center', color: 'var(--silt)' }}>Searching…</div>
+            ) : searchResults.length === 0 ? (
               <div style={{ padding: '24px 20px', textAlign: 'center' }}>
-                <p className="muted" style={{ fontSize: 14 }}>No suggestions right now.</p>
+                <p className="muted" style={{ fontSize: 14 }}>No boaters found for "{searchQuery}".</p>
               </div>
             ) : (
-              suggestions.map(person => (
-                <UserRow
-                  key={person._id}
-                  person={person}
-                  actionLabel="Follow"
-                  onAction={toggleFollow}
-                  loading={toggling === person._id}
-                  onClick={() => goToProfile(person._id)}
-                />
-              ))
-            )}
-          </div>
+              <div>
+                {searchResults.map(person => (
+                  <UserRow
+                    key={person._id}
+                    person={person}
+                    actionLabel={followingIds.has(person._id) ? 'Unfollow' : 'Follow'}
+                    onAction={toggleFollow}
+                    loading={toggling === person._id}
+                    onClick={() => goToProfile(person._id)}
+                  />
+                ))}
+              </div>
+            )
+          ) : (
+            <div>
+              <div className="label" style={{ padding: '16px 20px 8px' }}>Suggestions — people who follow you</div>
+              {suggestions.length === 0 ? (
+                <div style={{ padding: '24px 20px', textAlign: 'center' }}>
+                  <p className="muted" style={{ fontSize: 14 }}>No suggestions yet. Type a name above to search all boaters.</p>
+                </div>
+              ) : (
+                suggestions.map(person => (
+                  <UserRow
+                    key={person._id}
+                    person={person}
+                    actionLabel="Follow"
+                    onAction={toggleFollow}
+                    loading={toggling === person._id}
+                    onClick={() => goToProfile(person._id)}
+                  />
+                ))
+              )}
+            </div>
+          )
         )}
       </div>
     </div>
