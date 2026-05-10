@@ -109,8 +109,7 @@ export default function MessageThreadScreen() {
     setMessages(prev => [...prev, optimistic]);
 
     try {
-      const isFirst = messages.filter(m => !m._id?.startsWith('local-')).length === 0;
-      await api.sendMessage({ recipientId: threadId, body, ...(isFirst && listingId ? { listingId } : {}) });
+      await api.sendMessage({ recipientId: threadId, body, ...(listingId ? { listingId } : {}) });
       const data = await api.conversation(threadId);
       const msgs = Array.isArray(data) ? data : data.messages || [];
       if (msgs.length > 0) {
