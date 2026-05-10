@@ -97,7 +97,7 @@ export default function MessagesScreen() {
         ))}
       </div>
 
-      <div className="scroll">
+      <div className="scroll" style={{ background: 'var(--paper)' }}>
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--silt)' }}>Loading…</div>
         ) : filtered.length === 0 ? (

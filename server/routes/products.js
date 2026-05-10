@@ -51,7 +51,7 @@ router.get('/', async (req, res) => {
       if (maxPrice) filter.price.$lte = parseInt(maxPrice);
     }
 
-    let query = Product.find(filter).populate('sellerId', 'displayName username profilePhotoUrl mooringLat mooringLng mooringLocation');
+    let query = Product.find(filter).populate('sellerId', 'displayName username profilePhotoUrl boatName boatIndexNumber mooringLat mooringLng mooringLocation createdAt');
 
     if (sortBy === 'newest') {
       query = query.sort({ createdAt: -1 });
@@ -75,7 +75,7 @@ router.get('/:productId', async (req, res) => {
       req.params.productId,
       { $inc: { views: 1 } },
       { new: true }
-    ).populate('sellerId', 'displayName username profilePhotoUrl mooringLat mooringLng mooringLocation');
+    ).populate('sellerId', 'displayName username profilePhotoUrl boatName boatIndexNumber mooringLat mooringLng mooringLocation createdAt');
 
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });

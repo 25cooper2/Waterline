@@ -236,16 +236,21 @@ export default function ProductDetailScreen() {
           <div
             className="card"
             style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', marginBottom: 16 }}
+            onClick={() => { if (seller._id && !isOwner) nav(`/profile/${seller._id}`); }}
           >
-            <Avatar name={seller.displayName} size={44} />
+            <Avatar name={seller.displayName} src={seller.profilePhotoUrl} size={44} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontWeight: 600, fontSize: 15 }}>{seller.displayName || 'Boater'}</span>
-                <Icon name="verified" size={16} color="var(--moss)" />
+                {seller.isVerified && <Icon name="verified" size={16} color="var(--moss)" />}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                 {seller.boatName && <Plate>{seller.boatName}</Plate>}
-                <span style={{ fontSize: 12, color: 'var(--pebble)' }}>Joined 2024</span>
+                {seller.createdAt && (
+                  <span style={{ fontSize: 12, color: 'var(--pebble)' }}>
+                    Joined {new Date(seller.createdAt).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                  </span>
+                )}
               </div>
             </div>
             <Icon name="chevron" size={20} color="var(--pebble)" />
@@ -297,7 +302,7 @@ export default function ProductDetailScreen() {
             </button>
             <button
               className="btn primary block"
-              onClick={() => { if (seller._id) nav(`/inbox?to=${seller._id}`); }}
+              onClick={() => { if (seller._id) nav(`/inbox/${seller._id}`); }}
             >
               Message seller
             </button>
