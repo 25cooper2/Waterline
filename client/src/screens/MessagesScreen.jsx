@@ -22,7 +22,9 @@ function timeAgo(date) {
 }
 
 function threadKind(thread) {
-  if (thread.listing) return 'market';
+  // A thread is market if any message references a listing — checking the ID
+  // (not the populated object) so it works even if the listing was deleted.
+  if (thread.listingId || thread.messages.some(m => m.listingId)) return 'market';
   const msgs = thread.messages;
   if (msgs.some(m => m.kind === 'official' || m.kind === 'crt')) return 'official';
   if (msgs.some(m => m.kind === 'hail' || m.isHail)) return 'hail';
