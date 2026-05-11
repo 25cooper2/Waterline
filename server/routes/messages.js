@@ -98,7 +98,7 @@ router.get('/', authMiddleware, async (req, res) => {
     const messages = await Message.find(filter)
       .populate('senderId', 'displayName username profilePhotoUrl')
       .populate('recipientId', 'displayName username profilePhotoUrl')
-      .populate('listingId', 'title images price')
+      .populate('listingId', 'title images price removed')
       .sort({ createdAt: -1 })
       .exec();
 
@@ -133,7 +133,7 @@ router.get('/conversation/:otherUserId', authMiddleware, async (req, res) => {
     const messages = await Message.find(filter)
       .populate('senderId', 'displayName username profilePhotoUrl')
       .populate('recipientId', 'displayName username profilePhotoUrl')
-      .populate('listingId', 'title images price')
+      .populate('listingId', 'title images price removed')
       .sort({ createdAt: 1 })
       .exec();
 

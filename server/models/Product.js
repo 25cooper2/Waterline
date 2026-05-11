@@ -14,6 +14,9 @@ const productSchema = new mongoose.Schema({
   lng: { type: Number, default: null },
   boatIndexNumber: { type: String, default: null },
   isAvailable: { type: Boolean, default: true },
+  removed: { type: Boolean, default: false },
+  removedAt: { type: Date, default: null },
+  removalReason: { type: String, default: null },
   // Unique viewer tracking: dedup by IP + userAgent to count devices, not clicks
   viewers: [{
     ip: String,

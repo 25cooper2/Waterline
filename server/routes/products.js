@@ -40,7 +40,7 @@ router.post('/', authMiddleware, async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { category, minPrice, maxPrice, sortBy, type, favoriteOf } = req.query;
-    const filter = { isAvailable: true };
+    const filter = { isAvailable: true, removed: { $ne: true } };
 
     if (type) filter.listingType = type;
     if (category) filter.category = category;
@@ -169,7 +169,14 @@ router.post('/:productId/remove', authMiddleware, async (req, res) => {
       createdAt: product.createdAt,
     });
 
-    await Product.findByIdAndDelete(req.params.productId);
+    // Soft-delete so existing message threads keep their listing reference.
+    // The marketplace listing endpoints filter out removed products.
+    product.removed = true;
+    product.removedAt = new Date();
+    product.removalReason = reason;
+    product.isAvailable = false;
+    await product.save();
+
     res.json({ message: 'Listing removed', daysLive, reason });
   } catch (error) {
     res.status(500).json({ error: error.message });

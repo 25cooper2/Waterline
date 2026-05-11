@@ -151,8 +151,8 @@ export default function MessagesScreen() {
                     <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--silt)', flexShrink: 0 }}>{timeAgo(last.createdAt)}</span>
                   </div>
                   {thread.listing && (
-                    <div className="truncate" style={{ fontSize: 13, color: 'var(--moss-dark)', fontWeight: 600, marginTop: 1 }}>
-                      Re: {thread.listing.title}
+                    <div className="truncate" style={{ fontSize: 13, color: thread.listing.removed ? 'var(--silt)' : 'var(--moss-dark)', fontWeight: 600, marginTop: 1 }}>
+                      Re: {thread.listing.title}{thread.listing.removed ? ' (removed)' : ''}
                     </div>
                   )}
                   {last.subject && !thread.listing && <div className="truncate" style={{ fontSize: 14, fontWeight: hasUnread ? 600 : 400 }}>{last.subject}</div>}

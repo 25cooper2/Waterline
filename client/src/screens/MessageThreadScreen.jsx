@@ -140,6 +140,8 @@ export default function MessageThreadScreen() {
   const displayName = otherUser?.displayName || 'Boater';
   const plate = otherUser?.boatIndexNumber;
   const dateGroups = groupByDate(messages);
+  const listingRemoved = !!listing?.removed;
+  const composerDisabled = listingRemoved;
 
   return (
     <div className="screen" style={{ background: 'var(--linen)' }}>
@@ -173,12 +175,15 @@ export default function MessageThreadScreen() {
       {/* Listing context banner — only shown in listing-tied threads */}
       {listing && (
         <div
-          onClick={() => navigate(`/market/product/${listing._id}`)}
+          onClick={() => { if (!listingRemoved) navigate(`/market/product/${listing._id}`); }}
           style={{
             display: 'flex', alignItems: 'center', gap: 12,
-            padding: '10px 14px', background: 'var(--paper)',
-            borderBottom: '1px solid var(--reed)', cursor: 'pointer',
+            padding: '10px 14px',
+            background: listingRemoved ? 'var(--linen)' : 'var(--paper)',
+            borderBottom: '1px solid var(--reed)',
+            cursor: listingRemoved ? 'default' : 'pointer',
             flexShrink: 0,
+            opacity: listingRemoved ? 0.7 : 1,
           }}
         >
           <div style={{
@@ -186,6 +191,7 @@ export default function MessageThreadScreen() {
             background: listing.images?.[0] ? `url(${listing.images[0]}) center/cover no-repeat` : 'var(--linen)',
             flexShrink: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
+            filter: listingRemoved ? 'grayscale(1)' : 'none',
           }}>
             {!listing.images?.[0] && <Icon name="market" size={20} color="var(--pebble)" />}
           </div>
@@ -193,14 +199,35 @@ export default function MessageThreadScreen() {
             <div style={{
               fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600,
               letterSpacing: '0.08em', textTransform: 'uppercase',
-              color: 'var(--moss)', marginBottom: 2,
-            }}>About listing</div>
-            <div className="truncate" style={{ fontWeight: 600, fontSize: 14 }}>{listing.title}</div>
-            <div style={{ fontSize: 13, color: 'var(--moss)', fontWeight: 600 }}>
+              color: listingRemoved ? 'var(--silt)' : 'var(--moss)', marginBottom: 2,
+            }}>{listingRemoved ? 'Listing removed' : 'About listing'}</div>
+            <div className="truncate" style={{ fontWeight: 600, fontSize: 14, textDecoration: listingRemoved ? 'line-through' : 'none', color: listingRemoved ? 'var(--silt)' : 'var(--ink)' }}>{listing.title}</div>
+            <div style={{ fontSize: 13, color: listingRemoved ? 'var(--silt)' : 'var(--moss)', fontWeight: 600 }}>
               {listing.price === 0 ? 'Free' : `£${listing.price?.toLocaleString()}`}
             </div>
           </div>
-          <Icon name="chevron" size={18} color="var(--pebble)" />
+          {!listingRemoved && <Icon name="chevron" size={18} color="var(--pebble)" />}
+        </div>
+      )}
+
+      {/* Removed-listing notice */}
+      {listingRemoved && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          padding: '10px 14px',
+          background: 'var(--amber-soft, #fff4e0)',
+          borderBottom: '1px solid var(--reed)',
+          color: 'var(--ink)',
+          fontSize: 13, lineHeight: 1.4,
+          flexShrink: 0,
+        }}>
+          <Icon name="shield" size={16} color="var(--rust)" />
+          <div>
+            <strong style={{ fontWeight: 700 }}>This item has been removed from Waterline.</strong>
+            <div style={{ color: 'var(--silt)', marginTop: 2 }}>
+              You can still read past messages, but no new messages can be sent in this thread.
+            </div>
+          </div>
         </div>
       )}
 
@@ -287,12 +314,15 @@ export default function MessageThreadScreen() {
         background: 'var(--paper)',
         borderTop: '1px solid var(--reed)',
         flexShrink: 0,
+        opacity: composerDisabled ? 0.55 : 1,
+        pointerEvents: composerDisabled ? 'none' : 'auto',
       }}>
         <textarea
-          value={text}
+          value={composerDisabled ? '' : text}
           onChange={e => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={`Message ${displayName}…`}
+          placeholder={composerDisabled ? 'Messaging is closed for this listing' : `Message ${displayName}…`}
+          disabled={composerDisabled}
           rows={1}
           style={{
             flex: 1, resize: 'none',
@@ -314,12 +344,12 @@ export default function MessageThreadScreen() {
         />
         <button
           onClick={handleSend}
-          disabled={!text.trim() || sending}
+          disabled={!text.trim() || sending || composerDisabled}
           className="btn primary"
           style={{
             width: 40, height: 40, padding: 0,
             borderRadius: '50%', flexShrink: 0,
-            opacity: text.trim() && !sending ? 1 : 0.4,
+            opacity: text.trim() && !sending && !composerDisabled ? 1 : 0.4,
           }}
           aria-label="Send"
         >
