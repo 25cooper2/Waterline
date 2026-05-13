@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
-import WelcomeCarousel from './components/WelcomeCarousel';
+import { useIsDesktop } from './utils/useIsDesktop';
 import TabBar from './components/TabBar';
 import SplashScreen from './screens/SplashScreen';
 import AuthScreen from './screens/AuthScreen';
@@ -31,6 +31,10 @@ import OnbProfileScreen from './screens/onboarding/OnbProfileScreen';
 import OnbBoatScreen from './screens/onboarding/OnbBoatScreen';
 import OnbVerifyScreen from './screens/onboarding/OnbVerifyScreen';
 import OnbDoneScreen from './screens/onboarding/OnbDoneScreen';
+import FirstVisitChoiceScreen, { hasMadeFirstVisitChoice } from './screens/FirstVisitChoiceScreen';
+import DesktopMarketScreen from './screens/desktop/DesktopMarketScreen';
+import DesktopProductDetailScreen from './screens/desktop/DesktopProductDetailScreen';
+import DesktopFeaturesScreen from './screens/desktop/DesktopFeaturesScreen';
 
 function Layout() {
   return (
@@ -43,46 +47,36 @@ function Layout() {
   );
 }
 
-export default function App() {
-  const { loading, user } = useAuth();
-
-  // Show the welcome carousel to first-time visitors only.
-  // While it's visible, MapScreen renders invisibly behind it so the
-  // map tiles and canal data start loading straight away.
-  const [showCarousel, setShowCarousel] = useState(
-    () => !localStorage.getItem('wl_welcomed')
-  );
-
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, background: 'var(--paper)' }}>
-        <div style={{ color: 'var(--moss)', fontFamily: 'var(--font-serif)', fontSize: 28, fontStyle: 'italic' }}>Waterline</div>
-        <span className="wl-spinner lg" />
-      </div>
-    );
-  }
-
+// Routes for the desktop website (only used when not logged in on a large screen).
+function DesktopRoutes() {
   return (
-    <>
-      {/* Welcome carousel — full-screen overlay for first-time visitors */}
-      {showCarousel && (
-        <>
-          {/* MapScreen hidden behind the carousel so it pre-loads tiles & canal data */}
-          <div
-            style={{
-              position: 'fixed', inset: 0, zIndex: 1,
-              visibility: 'hidden', pointerEvents: 'none',
-            }}
-            aria-hidden="true"
-          >
-            <MapScreen />
-          </div>
-          <WelcomeCarousel onDismiss={() => setShowCarousel(false)} />
-        </>
-      )}
+    <Routes>
+      <Route path="/" element={<DesktopMarketScreen />} />
+      <Route path="/market" element={<DesktopMarketScreen />} />
+      <Route path="/market/product/:id" element={<DesktopProductDetailScreen />} />
+      <Route path="/market/service/:id" element={<DesktopProductDetailScreen />} />
+      <Route path="/features" element={<DesktopFeaturesScreen />} />
+      {/* Onboarding still works on desktop in case someone follows the link directly */}
+      <Route path="/onboarding/welcome" element={<WelcomeScreen />} />
+      <Route path="/onboarding/profile" element={<OnbProfileScreen />} />
+      <Route path="/onboarding/boat" element={<OnbBoatScreen />} />
+      <Route path="/onboarding/verify" element={<OnbVerifyScreen />} />
+      <Route path="/onboarding/done" element={<OnbDoneScreen />} />
+      <Route path="/auth" element={<AuthScreen />} />
+      <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
+      <Route path="/reset-password" element={<ForgotPasswordScreen />} />
+      {/* Anything else on desktop redirects to the marketplace home */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
 
-      <Routes>
-        {/* Public / auth */}
+// The existing mobile-shaped app — unchanged behaviour.
+function MobileRoutes() {
+  const { user } = useAuth();
+  return (
+    <Routes>
+      {/* Public / auth */}
       <Route path="/" element={user ? <Navigate to="/map" replace /> : <SplashScreen />} />
       <Route path="/auth" element={<AuthScreen />} />
 
@@ -123,8 +117,39 @@ export default function App() {
         <Route path="/me" element={<ProfileScreen />} />
       </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
+}
+
+export default function App() {
+  const { loading, user } = useAuth();
+  const isDesktop = useIsDesktop();
+  const location = useLocation();
+
+  const [showChoice, setShowChoice] = useState(() => !hasMadeFirstVisitChoice());
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, background: 'var(--paper)' }}>
+        <div style={{ color: 'var(--moss)', fontFamily: 'var(--font-serif)', fontSize: 28, fontStyle: 'italic' }}>Waterline</div>
+        <span className="wl-spinner lg" />
+      </div>
+    );
+  }
+
+  // First-time visitor (any device, not logged in) sees the choice page first.
+  // Logged-in users skip it — they've clearly been here before.
+  // Skip it too on the onboarding routes (so the QR-code phone link goes straight to onboarding).
+  const isOnboardingRoute = location.pathname.startsWith('/onboarding/');
+  if (showChoice && !user && !isOnboardingRoute) {
+    return <FirstVisitChoiceScreen onChoose={() => setShowChoice(false)} />;
+  }
+
+  // Desktop visitors who aren't logged in get the website.
+  if (isDesktop && !user) {
+    return <DesktopRoutes />;
+  }
+
+  return <MobileRoutes />;
 }
