@@ -61,3 +61,21 @@ export function getCachedLocation() {
 export function saveDeviceLocation(lat, lng) {
   _save(lat, lng);
 }
+
+/** Async — waits for a fresh GPS fix (up to timeoutMs), falls back to cache. */
+export function getLiveLocation(timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve(_load()); return; }
+    const timer = setTimeout(() => resolve(_load()), timeoutMs);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(timer);
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        _save(loc.lat, loc.lng);
+        resolve(loc);
+      },
+      () => { clearTimeout(timer); resolve(_load()); },
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 },
+    );
+  });
+}

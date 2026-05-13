@@ -119,7 +119,7 @@ export const api = {
   // Trade profiles
   getMyTradeProfile: () => req('/api/trade/me'),
   saveTradeProfile: (body) => req('/api/trade', { method: 'POST', body: JSON.stringify(body) }),
-  submitTradeProfile: () => req('/api/trade/submit', { method: 'POST' }),
+  submitTradeProfile: (body) => req('/api/trade/submit', { method: 'POST', body: JSON.stringify(body || {}) }),
   adminTradeProfiles: (status) => req(`/api/admin/trade-profiles${status ? `?status=${status}` : ''}`),
   adminApproveTradeProfile: (id, adminNote) => req(`/api/admin/trade-profiles/${id}/approve`, { method: 'POST', body: JSON.stringify({ adminNote }) }),
   adminRejectTradeProfile: (id, reason) => req(`/api/admin/trade-profiles/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),

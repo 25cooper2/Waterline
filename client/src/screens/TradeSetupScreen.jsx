@@ -170,7 +170,7 @@ export default function TradeSetupScreen() {
       const travelRadius = radiusVal >= 100 ? null : radiusVal;
       const location = chosenLocation || (mapPin ? { name: 'Custom pin', ...mapPin } : null);
 
-      await api.saveTradeProfile({
+      await api.submitTradeProfile({
         categories: picked,
         otherCategory: otherChecked && otherText.trim() ? otherText.trim() : null,
         businessName: businessName.trim() || null,
@@ -183,7 +183,6 @@ export default function TradeSetupScreen() {
         liabilityInsuranceUrl: insuranceFile?.dataUrl || null,
         tradeCertUrls: certFiles.map(f => f.dataUrl),
       });
-      await api.submitTradeProfile();
       nav('/me', { replace: true });
       alert('Trade profile submitted for review! We\'ll get back to you within 48 hours.');
     } catch (e) {

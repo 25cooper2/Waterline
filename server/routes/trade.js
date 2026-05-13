@@ -49,16 +49,37 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/trade/submit — mark as pending (submit for admin review)
+// POST /api/trade/submit — save final data and mark as pending for admin review
 router.post('/submit', authMiddleware, async (req, res) => {
   try {
+    const {
+      categories, otherCategory,
+      businessName, businessDescription, businessPhotos,
+      operatesAt, operatesLat, operatesLng, travelRadius,
+      liabilityInsuranceUrl, tradeCertUrls,
+    } = req.body;
+
+    const update = {
+      status: 'pending',
+      ...(categories !== undefined && { categories: Array.isArray(categories) ? categories : [] }),
+      ...(otherCategory !== undefined && { otherCategory: otherCategory || null }),
+      ...(businessName !== undefined && { businessName: businessName || null }),
+      ...(businessDescription !== undefined && { businessDescription: businessDescription || null }),
+      ...(businessPhotos !== undefined && { businessPhotos: Array.isArray(businessPhotos) ? businessPhotos.slice(0, 6) : [] }),
+      ...(operatesAt !== undefined && { operatesAt: operatesAt || null }),
+      ...(operatesLat !== undefined && { operatesLat: operatesLat ?? null }),
+      ...(operatesLng !== undefined && { operatesLng: operatesLng ?? null }),
+      ...(travelRadius !== undefined && { travelRadius: travelRadius ?? null }),
+      ...(liabilityInsuranceUrl !== undefined && { liabilityInsuranceUrl: liabilityInsuranceUrl || null }),
+      ...(tradeCertUrls !== undefined && { tradeCertUrls: Array.isArray(tradeCertUrls) ? tradeCertUrls.slice(0, 3) : [] }),
+    };
+
     const profile = await TradeProfile.findOneAndUpdate(
       { userId: req.user.userId },
-      { $set: { status: 'pending' } },
-      { new: true }
+      { $set: update },
+      { new: true, upsert: true }
     );
-    if (!profile) return res.status(404).json({ error: 'Save your trade profile first.' });
-    res.json({ message: 'Submitted for review. We'll get back to you within 48 hours.', profile });
+    res.json({ message: "Submitted for review. We'll get back to you within 48 hours.", profile });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

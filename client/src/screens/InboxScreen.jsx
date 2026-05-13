@@ -5,7 +5,7 @@ import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 import Plate from '../components/Plate';
-import { getCachedLocation, saveDeviceLocation } from '../utils/deviceLocation';
+import { getCachedLocation, saveDeviceLocation, getLiveLocation } from '../utils/deviceLocation';
 import { compressImage } from '../utils/imageCompress';
 import ReportSheet from '../components/ReportSheet';
 
