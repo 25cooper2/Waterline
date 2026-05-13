@@ -6,6 +6,7 @@ import { useAuth } from '../AuthContext';
 import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 import Plate from '../components/Plate';
+import ReportSheet from '../components/ReportSheet';
 
 function distanceMi(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -25,6 +26,7 @@ export default function ProductDetailScreen() {
   const [error, setError] = useState('');
   const [userLoc, setUserLoc] = useState(() => getCachedLocation());
   const [imgIndex, setImgIndex] = useState(0);
+  const [showReport, setShowReport] = useState(false);
   const viewRecordedRef = useRef(false);
   const touchX = useRef(null);
 
@@ -181,6 +183,21 @@ export default function ProductDetailScreen() {
           )}
         </div>
 
+        {/* Under review banner — only visible to the listing owner */}
+        {isOwner && product.reportStatus === 'pending_review' && (
+          <div style={{
+            margin: '16px 20px 0',
+            background: '#fff8e1', border: '1px solid #f9a825',
+            borderRadius: 'var(--r-md)', padding: '12px 14px',
+            display: 'flex', gap: 10, alignItems: 'flex-start',
+          }}>
+            <Icon name="warning" size={18} color="#f9a825" />
+            <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: '#5d4037' }}>
+              <strong>Your listing is under review.</strong> It's temporarily hidden from other users while we check a report. We'll send you a message once a decision has been made.
+            </p>
+          </div>
+        )}
+
         {/* Content */}
         <div style={{ padding: '20px 20px 28px' }}>
           {/* Category */}
@@ -306,9 +323,28 @@ export default function ProductDetailScreen() {
             >
               Message seller
             </button>
+            <button
+              onClick={() => setShowReport(true)}
+              style={{
+                width: 52, height: 52, borderRadius: 'var(--r-md)',
+                border: '1px solid var(--reed)', background: 'var(--paper-2)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}
+              title="Report listing"
+            >
+              <Icon name="flag" size={20} color="var(--silt)" />
+            </button>
           </>
         )}
       </div>
+
+      <ReportSheet
+        open={showReport}
+        onClose={() => setShowReport(false)}
+        targetLabel="this listing"
+        onSubmit={(reason, details) => api.fileReport({ targetType: 'product', targetId: id, reason, details })}
+      />
     </div>
   );
 }

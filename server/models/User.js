@@ -22,6 +22,7 @@ const userSchema = new mongoose.Schema({
   mooringLat: { type: Number, default: null },
   mooringLng: { type: Number, default: null },
   mooringLocation: { type: String, default: null },
+  reportStatus: { type: String, enum: ['active', 'pending_review', 'removed'], default: 'active' },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

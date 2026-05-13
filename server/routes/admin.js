@@ -5,6 +5,9 @@ import Product from '../models/Product.js';
 import Logbook from '../models/Logbook.js';
 import Hazard from '../models/Hazard.js';
 import ListingAnalytics from '../models/ListingAnalytics.js';
+import Post from '../models/Post.js';
+import Report from '../models/Report.js';
+import Message from '../models/Message.js';
 import { adminMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -460,6 +463,142 @@ router.post('/promote', adminMiddleware, async (req, res) => {
     res.json({ message: `${user.email} promoted to admin` });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+/* ─────────────────────────────────────────────────────────────────
+ * REPORTS — list / approve / dismiss
+ * ───────────────────────────────────────────────────────────────── */
+
+const REASON_LABELS = {
+  spam_scam: 'Spam or scam',
+  harassment: 'Harassment or abuse',
+  hate_speech: 'Hate speech',
+  sexual_content: 'Sexual or explicit content',
+  misinformation: 'Misinformation',
+  impersonation: 'Impersonation',
+  off_topic: 'Off-topic / not boating-related',
+  other: 'Other',
+};
+
+router.get('/reports', adminMiddleware, async (req, res) => {
+  try {
+    const { status = 'pending' } = req.query;
+    const reports = await Report.find({ status })
+      .populate('reporter', 'displayName username email')
+      .populate('resolvedBy', 'displayName username')
+      .sort({ createdAt: -1 })
+      .limit(500);
+
+    // Attach a snapshot of the reported content so admin can see it inline
+    const enriched = await Promise.all(reports.map(async (r) => {
+      let target = null;
+      try {
+        if (r.targetType === 'post') target = await Post.findById(r.targetId).populate('authorId', 'displayName username').lean();
+        else if (r.targetType === 'product') target = await Product.findById(r.targetId).populate('sellerId', 'displayName username').lean();
+        else if (r.targetType === 'user') target = await User.findById(r.targetId).select('displayName username email reportStatus').lean();
+      } catch {}
+      return { ...r.toObject(), target };
+    }));
+
+    res.json(enriched);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Approve a report: content is removed and reported user is notified
+router.post('/reports/:id/approve', adminMiddleware, async (req, res) => {
+  try {
+    const { adminNote } = req.body;
+    const report = await Report.findById(req.params.id);
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+    if (report.status !== 'pending') return res.status(400).json({ error: 'Report already resolved' });
+
+    report.status = 'approved';
+    report.adminNote = adminNote || null;
+    report.resolvedBy = req.user.userId;
+    report.resolvedAt = new Date();
+    await report.save();
+
+    // Remove the target content and find reported user's ID for notification
+    let reportedUserId = null;
+    if (report.targetType === 'post') {
+      const post = await Post.findById(report.targetId);
+      if (post) {
+        reportedUserId = post.authorId;
+        post.reportStatus = 'removed';
+        await post.save();
+      }
+    } else if (report.targetType === 'product') {
+      const product = await Product.findById(report.targetId);
+      if (product) {
+        reportedUserId = product.sellerId;
+        product.reportStatus = 'removed';
+        product.isAvailable = false;
+        await product.save();
+      }
+    } else if (report.targetType === 'user') {
+      const user = await User.findById(report.targetId);
+      if (user) {
+        reportedUserId = user._id;
+        user.reportStatus = 'removed';
+        await user.save();
+      }
+    }
+
+    // Notify reported user via message
+    if (reportedUserId) {
+      const typeLabel = report.targetType === 'post' ? 'post' : report.targetType === 'product' ? 'listing' : 'profile';
+      const noteText = adminNote ? ` Admin note: "${adminNote}".` : '';
+      await Message.create({
+        senderId: req.user.userId,
+        recipientId: reportedUserId,
+        subject: 'Content removed following a report',
+        body: `Hi — your ${typeLabel} was reviewed following a community report and has been removed for violating our community guidelines (reason: ${REASON_LABELS[report.reason] || report.reason}).${noteText} If you have questions, please reply to this message.`,
+      });
+    }
+
+    res.json({ message: 'Report approved, content removed, user notified' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Dismiss a report: content is restored and reporter is notified
+router.post('/reports/:id/dismiss', adminMiddleware, async (req, res) => {
+  try {
+    const { adminNote } = req.body;
+    const report = await Report.findById(req.params.id);
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+    if (report.status !== 'pending') return res.status(400).json({ error: 'Report already resolved' });
+
+    report.status = 'dismissed';
+    report.adminNote = adminNote || null;
+    report.resolvedBy = req.user.userId;
+    report.resolvedAt = new Date();
+    await report.save();
+
+    // Restore the target content
+    if (report.targetType === 'post') {
+      await Post.findByIdAndUpdate(report.targetId, { reportStatus: 'active' });
+    } else if (report.targetType === 'product') {
+      await Product.findByIdAndUpdate(report.targetId, { reportStatus: 'active', isAvailable: true });
+    } else if (report.targetType === 'user') {
+      await User.findByIdAndUpdate(report.targetId, { reportStatus: 'active' });
+    }
+
+    // Notify reporter
+    await Message.create({
+      senderId: req.user.userId,
+      recipientId: report.reporter,
+      subject: 'Update on your report',
+      body: `Thanks for flagging that content. We've reviewed your report and found it doesn't violate our community guidelines, so no action was taken. We appreciate you helping keep Waterline safe.`,
+    });
+
+    res.json({ message: 'Report dismissed, content restored, reporter notified' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

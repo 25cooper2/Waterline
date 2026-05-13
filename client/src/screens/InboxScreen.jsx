@@ -7,6 +7,7 @@ import Avatar from '../components/Avatar';
 import Plate from '../components/Plate';
 import { getCachedLocation, saveDeviceLocation } from '../utils/deviceLocation';
 import { compressImage } from '../utils/imageCompress';
+import ReportSheet from '../components/ReportSheet';
 
 const HAIL_REASONS = [
   'Moored next to you',
@@ -683,7 +684,7 @@ function PostDetailSheet({ postId, onClose, requireLogin, navigate, currentUser 
   const [post, setPost] = useState(null);
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
-  const [reportSent, setReportSent] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   useEffect(() => {
     api.getPost(postId).then(setPost).catch(() => {});
@@ -702,20 +703,10 @@ function PostDetailSheet({ postId, onClose, requireLogin, navigate, currentUser 
     setBusy(false);
   };
 
-  const reportPost = async () => {
-    if (!requireLogin()) return;
-    const reason = prompt('Why are you reporting this post? (optional)');
-    if (reason === null) return;
-    try {
-      await api.reportPost(postId, reason);
-      setReportSent(true);
-      setTimeout(onClose, 900);
-    } catch (e) { alert(e.message); }
-  };
-
   if (!post) return null;
   const a = post.authorId || {};
   const handle = a.username ? `@${a.username}` : (a.displayName || 'Boater');
+  const isOwnPost = currentUser && post.authorId?._id === currentUser._id;
 
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 2000, background: 'rgba(31,42,38,0.5)', display: 'flex', alignItems: 'flex-end' }}>
@@ -750,16 +741,19 @@ function PostDetailSheet({ postId, onClose, requireLogin, navigate, currentUser 
             <button onClick={() => document.getElementById('reply-input')?.focus()} className="btn ghost" style={{ flex: 1, height: 36, fontSize: 13 }}>
               <Icon name="send" size={14} /> Reply
             </button>
-            <button onClick={reportPost} className="btn ghost" style={{ flex: 1, height: 36, fontSize: 13, color: 'var(--rust)' }}>
-              <Icon name="flag" size={14} color="var(--rust)" /> Report
-            </button>
+            {!isOwnPost && (
+              <button onClick={() => { if (requireLogin()) setShowReport(true); }} className="btn ghost" style={{ flex: 1, height: 36, fontSize: 13, color: 'var(--rust)' }}>
+                <Icon name="flag" size={14} color="var(--rust)" /> Report
+              </button>
+            )}
           </div>
 
-          {reportSent && (
-            <div style={{ padding: 12, marginTop: 10, background: 'var(--moss-soft)', borderRadius: 8, fontSize: 13, color: 'var(--moss)' }}>
-              Reported. Hidden pending review.
-            </div>
-          )}
+          <ReportSheet
+            open={showReport}
+            onClose={() => setShowReport(false)}
+            targetLabel="this post"
+            onSubmit={(reason, details) => api.fileReport({ targetType: 'post', targetId: postId, reason, details })}
+          />
 
           {/* Replies */}
           <div style={{ marginTop: 12, paddingBottom: 12 }}>

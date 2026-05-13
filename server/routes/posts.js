@@ -153,18 +153,31 @@ router.post('/:postId/like', authMiddleware, async (req, res) => {
   }
 });
 
-// Report a post — auto-removes pending review
+// Report a post — delegates to the unified /api/reports endpoint logic
 router.post('/:postId/report', authMiddleware, async (req, res) => {
   try {
-    const { reason } = req.body || {};
+    const { reason, details } = req.body || {};
     const post = await Post.findById(req.params.postId);
     if (!post) return res.status(404).json({ error: 'Post not found' });
+
+    // Update inline fields on post
     if (!post.reportedBy.some(id => id.toString() === req.user.userId)) {
       post.reportedBy.push(req.user.userId);
     }
     if (reason) post.reportReasons.push(String(reason).slice(0, 200));
     post.reportStatus = 'pending_review';
     await post.save();
+
+    // Create Report document for admin queue (ignore if duplicate)
+    const Report = (await import('../models/Report.js')).default;
+    const VALID_REASONS = ['spam_scam', 'harassment', 'hate_speech', 'sexual_content', 'misinformation', 'impersonation', 'off_topic', 'other'];
+    const safeReason = VALID_REASONS.includes(reason) ? reason : 'other';
+    await Report.findOneAndUpdate(
+      { reporter: req.user.userId, targetType: 'post', targetId: req.params.postId },
+      { $setOnInsert: { reporter: req.user.userId, targetType: 'post', targetId: req.params.postId, reason: safeReason, details: details ? String(details).slice(0, 500) : null } },
+      { upsert: true, new: false }
+    ).catch(() => {}); // swallow duplicate key errors silently
+
     res.json({ message: 'Reported. Post hidden pending review.' });
   } catch (e) {
     res.status(500).json({ error: e.message });

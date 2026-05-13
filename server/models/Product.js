@@ -25,6 +25,8 @@ const productSchema = new mongoose.Schema({
     viewedAt: { type: Date, default: Date.now },
   }],
   favorites: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', default: [] }],
+  reportStatus: { type: String, enum: ['active', 'pending_review', 'removed'], default: 'active' },
+  reportedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

@@ -108,6 +108,12 @@ export const api = {
   reportPost: (id, reason) => req(`/api/posts/${id}/report`, { method: 'POST', body: JSON.stringify({ reason }) }),
   likePost: (id) => req(`/api/posts/${id}/like`, { method: 'POST' }),
 
+  // Reports
+  fileReport: (body) => req('/api/reports', { method: 'POST', body: JSON.stringify(body) }),
+  adminReports: (status = 'pending') => req(`/api/admin/reports?status=${status}`),
+  adminApproveReport: (id, adminNote) => req(`/api/admin/reports/${id}/approve`, { method: 'POST', body: JSON.stringify({ adminNote }) }),
+  adminDismissReport: (id, adminNote) => req(`/api/admin/reports/${id}/dismiss`, { method: 'POST', body: JSON.stringify({ adminNote }) }),
+
   // Follows
   searchUsers: (q) => req(`/api/users/_search?q=${encodeURIComponent(q)}`),
   getPublicProfile: (userId) => req(`/api/users/${userId}`),

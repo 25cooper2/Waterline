@@ -455,7 +455,169 @@ const REASON_LABELS = {
   no_longer_needed: 'No longer needed',
 };
 
-const TABS = ['Overview', 'Approvals', 'Users', 'Listings', 'Boats', 'Hazards', 'Logbook', 'Removals'];
+const REPORT_REASON_LABELS = {
+  spam_scam: 'Spam or scam',
+  harassment: 'Harassment or abuse',
+  hate_speech: 'Hate speech',
+  sexual_content: 'Sexual or explicit content',
+  misinformation: 'Misinformation',
+  impersonation: 'Impersonation',
+  off_topic: 'Off-topic / not boating-related',
+  other: 'Other',
+};
+
+function ReportsTab({ reports, setReports, filter, setFilter }) {
+  const [actioning, setActioning] = useState(null);
+
+  const loadReports = async (status) => {
+    try {
+      const data = await api.adminReports(status);
+      setReports(data);
+    } catch (e) { alert('Failed to load reports: ' + e.message); }
+  };
+
+  const handleFilter = (status) => {
+    setFilter(status);
+    loadReports(status);
+  };
+
+  const approve = async (report) => {
+    const note = prompt('Optional note to include in the message to the reported user:') ?? '';
+    if (note === null) return;
+    setActioning(report._id);
+    try {
+      await api.adminApproveReport(report._id, note || undefined);
+      setReports(prev => prev.filter(r => r._id !== report._id));
+    } catch (e) { alert('Failed: ' + e.message); }
+    setActioning(null);
+  };
+
+  const dismiss = async (report) => {
+    const note = prompt('Optional note to include in the message to the reporter:') ?? '';
+    if (note === null) return;
+    setActioning(report._id);
+    try {
+      await api.adminDismissReport(report._id, note || undefined);
+      setReports(prev => prev.filter(r => r._id !== report._id));
+    } catch (e) { alert('Failed: ' + e.message); }
+    setActioning(null);
+  };
+
+  const targetSummary = (report) => {
+    const t = report.target;
+    if (!t) return <span style={{ color: 'var(--silt)' }}>Content deleted</span>;
+    if (report.targetType === 'post') return <span>Post: "{String(t.body || '').slice(0, 80)}{t.body?.length > 80 ? '…' : ''}" — by {t.authorId?.displayName || t.authorId?.username || '?'}</span>;
+    if (report.targetType === 'product') return <span>Listing: "{t.title}" — by {t.sellerId?.displayName || t.sellerId?.username || '?'}</span>;
+    if (report.targetType === 'user') return <span>Profile: {t.displayName || t.username || t.email}</span>;
+    return null;
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {['pending', 'approved', 'dismissed'].map(s => (
+          <button
+            key={s}
+            onClick={() => handleFilter(s)}
+            style={{
+              padding: '7px 14px', borderRadius: 'var(--r-md)', cursor: 'pointer',
+              fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: filter === s ? 700 : 500,
+              background: filter === s ? 'var(--ink)' : 'var(--paper)',
+              color: filter === s ? 'var(--paper)' : 'var(--ink)',
+              border: '1px solid var(--reed)', textTransform: 'capitalize',
+            }}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {reports.length === 0 ? (
+        <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--silt)', fontSize: 14 }}>
+          No {filter} reports.
+        </div>
+      ) : (
+        reports.map(r => (
+          <div key={r._id} style={{
+            background: 'var(--paper)', border: '1px solid var(--reed)',
+            borderRadius: 'var(--r-lg)', padding: '16px 18px', marginBottom: 12,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                    letterSpacing: '0.07em', padding: '2px 8px', borderRadius: 99,
+                    background: r.targetType === 'user' ? '#e8f5e9' : r.targetType === 'product' ? '#e3f2fd' : '#fce4ec',
+                    color: r.targetType === 'user' ? '#2e7d32' : r.targetType === 'product' ? '#1565c0' : '#880e4f',
+                  }}>
+                    {r.targetType}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--rust)' }}>
+                    {REPORT_REASON_LABELS[r.reason] || r.reason}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--silt)', marginLeft: 'auto' }}>
+                    {fmtDateTime(r.createdAt)}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: 13.5, color: 'var(--ink)', marginBottom: 6 }}>
+                  {targetSummary(r)}
+                </div>
+
+                {r.details && (
+                  <div style={{ fontSize: 13, color: 'var(--silt)', fontStyle: 'italic', marginBottom: 6 }}>
+                    "{r.details}"
+                  </div>
+                )}
+
+                <div style={{ fontSize: 12, color: 'var(--pebble)' }}>
+                  Reported by: {r.reporter?.displayName || r.reporter?.username || '?'} ({r.reporter?.email})
+                </div>
+
+                {r.adminNote && (
+                  <div style={{ fontSize: 12, color: 'var(--silt)', marginTop: 4 }}>
+                    Admin note: {r.adminNote}
+                  </div>
+                )}
+              </div>
+
+              {filter === 'pending' && (
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  <button
+                    disabled={actioning === r._id}
+                    onClick={() => approve(r)}
+                    style={{
+                      padding: '8px 14px', borderRadius: 'var(--r-md)', cursor: 'pointer',
+                      background: 'var(--rust)', color: '#fff', border: 'none',
+                      fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600,
+                    }}
+                  >
+                    Remove
+                  </button>
+                  <button
+                    disabled={actioning === r._id}
+                    onClick={() => dismiss(r)}
+                    style={{
+                      padding: '8px 14px', borderRadius: 'var(--r-md)', cursor: 'pointer',
+                      background: 'var(--paper)', color: 'var(--ink)',
+                      border: '1px solid var(--reed)',
+                      fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600,
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+const TABS = ['Overview', 'Approvals', 'Reports', 'Users', 'Listings', 'Boats', 'Hazards', 'Logbook', 'Removals'];
 
 /* ── main component ────────────────────────────────────────────── */
 
@@ -497,6 +659,8 @@ export default function AdminScreen() {
   const [logs, setLogs] = useState([]);
   const [removals, setRemovals] = useState([]);
   const [pending, setPending] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [reportFilter, setReportFilter] = useState('pending');
   const [actioning, setActioning] = useState(null);
   const [loading, setLoading] = useState(true);
   const [promoteEmail, setPromoteEmail] = useState('');
@@ -517,9 +681,11 @@ export default function AdminScreen() {
       api.adminLogbooks().catch(() => []),
       api.adminRemovals(),
       api.adminPendingCerts().catch(() => []),
-    ]).then(([s, u, l, b, h, lg, r, p]) => {
+      api.adminReports('pending').catch(() => []),
+    ]).then(([s, u, l, b, h, lg, r, p, rpts]) => {
       setStats(s); setUsers(u); setListings(l); setBoats(b);
       setHazards(h); setLogs(lg); setRemovals(r); setPending(p);
+      setReports(rpts);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [user]);
 
@@ -863,9 +1029,10 @@ export default function AdminScreen() {
                   </div>
                 </Section>
                 <Section title="Activity">
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                     <StatCard label="Log entries" value={stats.logbook.total} />
                     <StatCard label="Hazard reports" value={stats.hazards.total} />
+                    <StatCard label="Pending reports" value={reports.length} color={reports.length > 0 ? 'var(--rust)' : undefined} />
                   </div>
                 </Section>
                 <Section title="Listing removals">
@@ -964,6 +1131,15 @@ export default function AdminScreen() {
                   </div>
                 )}
               </Section>
+            )}
+
+            {tab === 'Reports' && (
+              <ReportsTab
+                reports={reports}
+                setReports={setReports}
+                filter={reportFilter}
+                setFilter={setReportFilter}
+              />
             )}
 
             {tab === 'Users' && (

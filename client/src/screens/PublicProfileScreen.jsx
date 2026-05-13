@@ -6,6 +6,7 @@ import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 import Plate from '../components/Plate';
 import LoginWall from '../components/LoginWall';
+import ReportSheet from '../components/ReportSheet';
 
 function timeAgo(date) {
   const diff = Date.now() - new Date(date).getTime();
@@ -30,6 +31,7 @@ export default function PublicProfileScreen() {
   const [friendStatus, setFriendStatus] = useState('none');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showReport, setShowReport] = useState(false);
 
   // Self-profile shortcut
   useEffect(() => {
@@ -190,6 +192,14 @@ export default function PublicProfileScreen() {
               >
                 <Icon name="send" size={18} />
               </button>
+              <button
+                onClick={() => setShowReport(true)}
+                className="btn ghost"
+                style={{ width: 46, flexShrink: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Report profile"
+              >
+                <Icon name="flag" size={18} color="var(--silt)" />
+              </button>
             </div>
 
             <div style={{ display: 'flex', gap: 0, borderTop: '1px solid var(--reed)', borderBottom: '1px solid var(--reed)' }}>
@@ -234,6 +244,13 @@ export default function PublicProfileScreen() {
           </>
         )}
       </div>
+
+      <ReportSheet
+        open={showReport}
+        onClose={() => setShowReport(false)}
+        targetLabel="this profile"
+        onSubmit={(reason, details) => api.fileReport({ targetType: 'user', targetId: userId, reason, details })}
+      />
     </div>
   );
 }
