@@ -5,6 +5,7 @@ import User from '../models/User.js';
 import Boat from '../models/Boat.js';
 import Product from '../models/Product.js';
 import Logbook from '../models/Logbook.js';
+import TradeProfile from '../models/TradeProfile.js';
 import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -88,6 +89,11 @@ router.get('/me', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     const userData = user.toJSON();
+    const tp = await TradeProfile.findOne({ userId: req.user.userId });
+    if (tp) {
+      userData.tradeProfileStatus = tp.status;
+      userData.isTrader = tp.status === 'approved';
+    }
     const boat = await Boat.findOne({
       $or: [{ ownerId: req.user.userId }, { coOwners: req.user.userId }]
     });
