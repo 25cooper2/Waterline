@@ -743,6 +743,18 @@ out center geom qt;`;
   };
   const visibleHazards = filters.hazards ? hazards : [];
 
+  // Creates a custom Leaflet pane so waterway lines render above every other
+  // feature (markers, hazards, journeys). z-index 650 sits above markerPane (600).
+  const WaterwayPane = () => {
+    const map = useMap();
+    if (!map.getPane('waterwayPane')) {
+      const p = map.createPane('waterwayPane');
+      p.style.zIndex = 650;
+      p.style.pointerEvents = 'auto';
+    }
+    return null;
+  };
+
   return (
     <div className="screen" style={{ position: 'relative' }}>
       <MapContainer center={mapCenter} zoom={initialZoom} style={{ flex: 1, width: '100%', minHeight: 0, height: '100%' }} zoomControl={false}>
@@ -755,11 +767,13 @@ out center geom qt;`;
         <MapViewTracker onViewChange={setBboxKey} onCenterChange={setMapCenter} onZoomChange={setMapZoom} />
         <MapClickCatcher onClick={() => setCanalPanelOpen(false)} />
         <FlyTo center={flyTarget} />
+        <WaterwayPane />
 
-        {/* Waterway lines — rendered first so they sit behind all markers */}
+        {/* Waterway lines — rendered in a custom pane (z-index 650) so they
+            sit above all other features. Fully opaque solid teal lines. */}
         {waterwayLines.map(wl => (
-          <Polyline key={wl.id} positions={wl.coords}
-            pathOptions={{ color: '#20B2AA', weight: 9, opacity: 0.7 }}>
+          <Polyline key={wl.id} positions={wl.coords} pane="waterwayPane"
+            pathOptions={{ color: '#20B2AA', weight: 9, opacity: 1 }}>
             <Popup><span style={{ fontSize: 12 }}>{wl.name}</span></Popup>
           </Polyline>
         ))}
