@@ -466,8 +466,218 @@ const REPORT_REASON_LABELS = {
   other: 'Other',
 };
 
+/* ── Report detail modal ─────────────────────────────────────────── */
+
+function ReportDetailModal({ report, onClose, onApprove, onDismiss, actioning }) {
+  const r = report;
+  const t = r.target;
+  const rs = r.replySnapshot;
+
+  const typeColors = {
+    post: { bg: '#fce4ec', fg: '#880e4f' },
+    reply: { bg: '#fce4ec', fg: '#880e4f' },
+    product: { bg: '#e3f2fd', fg: '#1565c0' },
+    user: { bg: '#e8f5e9', fg: '#2e7d32' },
+  };
+  const tc = typeColors[r.targetType] || { bg: '#f5f5f5', fg: '#333' };
+
+  const ProfileLink = ({ user, label }) => {
+    if (!user?._id) return <span style={{ color: 'var(--silt)' }}>{label || 'Unknown'}</span>;
+    return (
+      <a
+        href={`/profile/${user._id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: 'var(--moss)', fontWeight: 600, textDecoration: 'none' }}
+      >
+        {label || user.displayName || user.username || user.email}
+      </a>
+    );
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+      zIndex: 300, display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      padding: 16, overflowY: 'auto',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxWidth: 680, background: 'var(--paper)',
+        borderRadius: 'var(--r-lg)', overflow: 'hidden',
+        marginTop: 24, marginBottom: 24,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--reed)', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--linen)' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', padding: '3px 9px', borderRadius: 99, background: tc.bg, color: tc.fg }}>{r.targetType}</span>
+          <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--rust)', flex: 1 }}>{REPORT_REASON_LABELS[r.reason] || r.reason}</span>
+          <span style={{ fontSize: 12, color: 'var(--silt)' }}>{fmtDateTime(r.createdAt)}</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, lineHeight: 1, cursor: 'pointer', color: 'var(--silt)', marginLeft: 4 }}>×</button>
+        </div>
+
+        <div style={{ padding: 18, maxHeight: '72vh', overflowY: 'auto' }}>
+          {/* Reporter */}
+          <div style={{ marginBottom: 16, padding: '12px 14px', background: 'var(--linen)', borderRadius: 'var(--r-md)', fontSize: 13 }}>
+            <span style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.08em', color: 'var(--silt)', display: 'block', marginBottom: 4 }}>Reported by</span>
+            <ProfileLink user={r.reporter} label={`${r.reporter?.displayName || r.reporter?.username || '?'} (${r.reporter?.email || ''})`} />
+          </div>
+
+          {/* Reported content */}
+          {!t && (
+            <div style={{ padding: 14, background: 'var(--linen)', borderRadius: 'var(--r-md)', color: 'var(--silt)', fontSize: 13, marginBottom: 14 }}>
+              Content has been deleted.
+            </div>
+          )}
+
+          {/* POST */}
+          {t && (r.targetType === 'post') && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--silt)', marginBottom: 8 }}>Post</div>
+              <div style={{ padding: '14px 16px', background: 'var(--linen)', borderRadius: 'var(--r-md)', border: '1px solid var(--reed)' }}>
+                <div style={{ marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>Author: </span>
+                  <ProfileLink user={t.authorId} label={t.authorId?.displayName || t.authorId?.username} />
+                  {t.authorId?.email && <span style={{ fontSize: 12, color: 'var(--silt)', marginLeft: 6 }}>({t.authorId.email})</span>}
+                </div>
+                <div style={{ fontSize: 14.5, color: 'var(--ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5, marginBottom: 10 }}>{t.body}</div>
+                {t.photos?.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {t.photos.map((src, i) => (
+                      <a key={i} href={src} target="_blank" rel="noopener noreferrer">
+                        <img src={src} alt="" style={{ width: 120, height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--reed)' }} />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* REPLY */}
+          {t && r.targetType === 'reply' && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--silt)', marginBottom: 8 }}>Reported Reply</div>
+              {rs ? (
+                <div style={{ padding: '14px 16px', background: '#fce4ec22', borderRadius: 'var(--r-md)', border: '1.5px solid #880e4f44' }}>
+                  <div style={{ marginBottom: 6 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>Reply author: </span>
+                    <ProfileLink user={rs.authorId} label={rs.authorId?.displayName || rs.authorId?.username} />
+                  </div>
+                  <div style={{ fontSize: 14.5, color: 'var(--ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{rs.body}</div>
+                </div>
+              ) : (
+                <div style={{ padding: 12, background: 'var(--linen)', borderRadius: 'var(--r-md)', color: 'var(--silt)', fontSize: 13 }}>Reply not found (may already be removed).</div>
+              )}
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--silt)', marginBottom: 6 }}>Parent post (context)</div>
+                <div style={{ padding: '12px 14px', background: 'var(--linen)', borderRadius: 'var(--r-md)', border: '1px solid var(--reed)' }}>
+                  <div style={{ marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>Post author: </span>
+                    <ProfileLink user={t.authorId} label={t.authorId?.displayName || t.authorId?.username} />
+                  </div>
+                  <div style={{ fontSize: 13.5, color: 'var(--ink)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{t.body}</div>
+                  {t.photos?.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                      {t.photos.map((src, i) => (
+                        <a key={i} href={src} target="_blank" rel="noopener noreferrer">
+                          <img src={src} alt="" style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--reed)' }} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PRODUCT / LISTING */}
+          {t && r.targetType === 'product' && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--silt)', marginBottom: 8 }}>Listing</div>
+              <div style={{ padding: '14px 16px', background: 'var(--linen)', borderRadius: 'var(--r-md)', border: '1px solid var(--reed)' }}>
+                <div style={{ marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, fontSize: 15 }}>{t.title}</span>
+                  <span style={{ fontSize: 12, color: 'var(--silt)', marginLeft: 8 }}>{t.listingType} · {t.category}</span>
+                </div>
+                <div style={{ marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>Seller: </span>
+                  <ProfileLink user={t.sellerId} label={t.sellerId?.displayName || t.sellerId?.username} />
+                  {t.sellerId?.email && <span style={{ fontSize: 12, color: 'var(--silt)', marginLeft: 6 }}>({t.sellerId.email})</span>}
+                </div>
+                {t.description && (
+                  <div style={{ fontSize: 13.5, color: 'var(--ink)', whiteSpace: 'pre-wrap', lineHeight: 1.5, marginBottom: 10 }}>{t.description}</div>
+                )}
+                {t.images?.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {t.images.map((src, i) => (
+                      <a key={i} href={src} target="_blank" rel="noopener noreferrer">
+                        <img src={src} alt="" style={{ width: 120, height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--reed)' }} />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* USER / PROFILE */}
+          {t && r.targetType === 'user' && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--silt)', marginBottom: 8 }}>Reported profile</div>
+              <div style={{ padding: '14px 16px', background: 'var(--linen)', borderRadius: 'var(--r-md)', border: '1px solid var(--reed)' }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                  <ProfileLink user={t} label={t.displayName || t.username || t.email} />
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--silt)', marginBottom: 6 }}>{t.email} {t.username ? `· @${t.username}` : ''}</div>
+                {t.bio && <div style={{ fontSize: 13.5, color: 'var(--ink)', lineHeight: 1.5 }}>{t.bio}</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Reporter's details */}
+          {r.details && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--silt)', marginBottom: 6 }}>Reporter's note</div>
+              <div style={{ padding: '12px 14px', background: 'var(--linen)', borderRadius: 'var(--r-md)', fontStyle: 'italic', fontSize: 13.5, color: 'var(--ink)' }}>
+                "{r.details}"
+              </div>
+            </div>
+          )}
+
+          {r.adminNote && (
+            <div style={{ padding: '10px 14px', background: 'var(--moss-soft)', borderRadius: 'var(--r-md)', fontSize: 13, color: 'var(--ink)' }}>
+              <strong>Admin note:</strong> {r.adminNote}
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div style={{ padding: '14px 18px', borderTop: '1px solid var(--reed)', display: 'flex', gap: 8, background: 'var(--linen)' }}>
+          <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 'var(--r-md)', border: '1px solid var(--reed)', background: 'var(--paper)', color: 'var(--ink)', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+            Close
+          </button>
+          <div style={{ flex: 1 }} />
+          {r.status === 'pending' && (
+            <>
+              <button disabled={actioning === r._id} onClick={() => onDismiss(r)}
+                style={{ padding: '10px 16px', borderRadius: 'var(--r-md)', border: '1px solid var(--reed)', background: 'var(--paper)', color: 'var(--ink)', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+                Dismiss
+              </button>
+              <button disabled={actioning === r._id} onClick={() => onApprove(r)}
+                style={{ padding: '10px 18px', borderRadius: 'var(--r-md)', border: 'none', background: 'var(--rust)', color: '#fff', fontWeight: 700, fontSize: 14, cursor: actioning === r._id ? 'wait' : 'pointer', fontFamily: 'var(--font-sans)' }}>
+                {actioning === r._id ? '…' : 'Remove content'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReportsTab({ reports, setReports, filter, setFilter }) {
   const [actioning, setActioning] = useState(null);
+  const [detailReport, setDetailReport] = useState(null);
 
   const loadReports = async (status) => {
     try {
@@ -488,6 +698,7 @@ function ReportsTab({ reports, setReports, filter, setFilter }) {
     try {
       await api.adminApproveReport(report._id, note || undefined);
       setReports(prev => prev.filter(r => r._id !== report._id));
+      setDetailReport(null);
     } catch (e) { alert('Failed: ' + e.message); }
     setActioning(null);
   };
@@ -499,13 +710,23 @@ function ReportsTab({ reports, setReports, filter, setFilter }) {
     try {
       await api.adminDismissReport(report._id, note || undefined);
       setReports(prev => prev.filter(r => r._id !== report._id));
+      setDetailReport(null);
     } catch (e) { alert('Failed: ' + e.message); }
     setActioning(null);
   };
 
+  const typeColors = {
+    post: { bg: '#fce4ec', fg: '#880e4f' },
+    reply: { bg: '#fce4ec', fg: '#880e4f' },
+    product: { bg: '#e3f2fd', fg: '#1565c0' },
+    user: { bg: '#e8f5e9', fg: '#2e7d32' },
+  };
+
   const targetSummary = (report) => {
     const t = report.target;
+    const rs = report.replySnapshot;
     if (!t) return <span style={{ color: 'var(--silt)' }}>Content deleted</span>;
+    if (report.targetType === 'reply') return <span>Reply: "{String(rs?.body || '').slice(0, 80)}{(rs?.body?.length || 0) > 80 ? '…' : ''}" — by {rs?.authorId?.displayName || rs?.authorId?.username || '?'}</span>;
     if (report.targetType === 'post') return <span>Post: "{String(t.body || '').slice(0, 80)}{t.body?.length > 80 ? '…' : ''}" — by {t.authorId?.displayName || t.authorId?.username || '?'}</span>;
     if (report.targetType === 'product') return <span>Listing: "{t.title}" — by {t.sellerId?.displayName || t.sellerId?.username || '?'}</span>;
     if (report.targetType === 'user') return <span>Profile: {t.displayName || t.username || t.email}</span>;
@@ -514,6 +735,16 @@ function ReportsTab({ reports, setReports, filter, setFilter }) {
 
   return (
     <div>
+      {detailReport && (
+        <ReportDetailModal
+          report={detailReport}
+          onClose={() => setDetailReport(null)}
+          onApprove={approve}
+          onDismiss={dismiss}
+          actioning={actioning}
+        />
+      )}
+
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {['pending', 'approved', 'dismissed'].map(s => (
           <button
@@ -537,87 +768,93 @@ function ReportsTab({ reports, setReports, filter, setFilter }) {
           No {filter} reports.
         </div>
       ) : (
-        reports.map(r => (
-          <div key={r._id} style={{
-            background: 'var(--paper)', border: '1px solid var(--reed)',
-            borderRadius: 'var(--r-lg)', padding: '16px 18px', marginBottom: 12,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
-                  <span style={{
-                    fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-                    letterSpacing: '0.07em', padding: '2px 8px', borderRadius: 99,
-                    background: r.targetType === 'user' ? '#e8f5e9' : r.targetType === 'product' ? '#e3f2fd' : '#fce4ec',
-                    color: r.targetType === 'user' ? '#2e7d32' : r.targetType === 'product' ? '#1565c0' : '#880e4f',
-                  }}>
-                    {r.targetType}
-                  </span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--rust)' }}>
-                    {REPORT_REASON_LABELS[r.reason] || r.reason}
-                  </span>
-                  <span style={{ fontSize: 12, color: 'var(--silt)', marginLeft: 'auto' }}>
-                    {fmtDateTime(r.createdAt)}
-                  </span>
-                </div>
-
-                <div style={{ fontSize: 13.5, color: 'var(--ink)', marginBottom: 6 }}>
-                  {targetSummary(r)}
-                </div>
-
-                {r.details && (
-                  <div style={{ fontSize: 13, color: 'var(--silt)', fontStyle: 'italic', marginBottom: 6 }}>
-                    "{r.details}"
+        reports.map(r => {
+          const tc = typeColors[r.targetType] || { bg: '#f5f5f5', fg: '#333' };
+          return (
+            <div key={r._id} style={{
+              background: 'var(--paper)', border: '1px solid var(--reed)',
+              borderRadius: 'var(--r-lg)', padding: '16px 18px', marginBottom: 12,
+              cursor: 'pointer',
+            }}
+              onClick={() => setDetailReport(r)}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                      letterSpacing: '0.07em', padding: '2px 8px', borderRadius: 99,
+                      background: tc.bg, color: tc.fg,
+                    }}>
+                      {r.targetType}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--rust)' }}>
+                      {REPORT_REASON_LABELS[r.reason] || r.reason}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--silt)', marginLeft: 'auto' }}>
+                      {fmtDateTime(r.createdAt)}
+                    </span>
                   </div>
-                )}
 
-                <div style={{ fontSize: 12, color: 'var(--pebble)' }}>
-                  Reported by: {r.reporter?.displayName || r.reporter?.username || '?'} ({r.reporter?.email})
+                  <div style={{ fontSize: 13.5, color: 'var(--ink)', marginBottom: 6 }}>
+                    {targetSummary(r)}
+                  </div>
+
+                  {r.details && (
+                    <div style={{ fontSize: 13, color: 'var(--silt)', fontStyle: 'italic', marginBottom: 6 }}>
+                      "{r.details}"
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: 12, color: 'var(--pebble)' }}>
+                    Reported by: {r.reporter?.displayName || r.reporter?.username || '?'} ({r.reporter?.email})
+                    <span style={{ marginLeft: 10, color: 'var(--moss)', fontWeight: 600 }}>Tap to view full detail →</span>
+                  </div>
+
+                  {r.adminNote && (
+                    <div style={{ fontSize: 12, color: 'var(--silt)', marginTop: 4 }}>
+                      Admin note: {r.adminNote}
+                    </div>
+                  )}
                 </div>
 
-                {r.adminNote && (
-                  <div style={{ fontSize: 12, color: 'var(--silt)', marginTop: 4 }}>
-                    Admin note: {r.adminNote}
+                {filter === 'pending' && (
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                    <button
+                      disabled={actioning === r._id}
+                      onClick={() => approve(r)}
+                      style={{
+                        padding: '8px 14px', borderRadius: 'var(--r-md)', cursor: 'pointer',
+                        background: 'var(--rust)', color: '#fff', border: 'none',
+                        fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600,
+                      }}
+                    >
+                      Remove
+                    </button>
+                    <button
+                      disabled={actioning === r._id}
+                      onClick={() => dismiss(r)}
+                      style={{
+                        padding: '8px 14px', borderRadius: 'var(--r-md)', cursor: 'pointer',
+                        background: 'var(--paper)', color: 'var(--ink)',
+                        border: '1px solid var(--reed)',
+                        fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600,
+                      }}
+                    >
+                      Dismiss
+                    </button>
                   </div>
                 )}
               </div>
-
-              {filter === 'pending' && (
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                  <button
-                    disabled={actioning === r._id}
-                    onClick={() => approve(r)}
-                    style={{
-                      padding: '8px 14px', borderRadius: 'var(--r-md)', cursor: 'pointer',
-                      background: 'var(--rust)', color: '#fff', border: 'none',
-                      fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600,
-                    }}
-                  >
-                    Remove
-                  </button>
-                  <button
-                    disabled={actioning === r._id}
-                    onClick={() => dismiss(r)}
-                    style={{
-                      padding: '8px 14px', borderRadius: 'var(--r-md)', cursor: 'pointer',
-                      background: 'var(--paper)', color: 'var(--ink)',
-                      border: '1px solid var(--reed)',
-                      fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600,
-                    }}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              )}
             </div>
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );
 }
 
-const TABS = ['Overview', 'Approvals', 'Reports', 'Users', 'Listings', 'Boats', 'Hazards', 'Logbook', 'Removals'];
+const TABS = ['Overview', 'Approvals', 'Reports', 'Trade Profiles', 'Users', 'Listings', 'Boats', 'Hazards', 'Logbook', 'Removals'];
 
 /* ── main component ────────────────────────────────────────────── */
 
@@ -661,6 +898,9 @@ export default function AdminScreen() {
   const [pending, setPending] = useState([]);
   const [reports, setReports] = useState([]);
   const [reportFilter, setReportFilter] = useState('pending');
+  const [tradeProfiles, setTradeProfiles] = useState([]);
+  const [tradeFilter, setTradeFilter] = useState('pending');
+  const [tradeActioning, setTradeActioning] = useState(null);
   const [actioning, setActioning] = useState(null);
   const [loading, setLoading] = useState(true);
   const [promoteEmail, setPromoteEmail] = useState('');
@@ -682,10 +922,11 @@ export default function AdminScreen() {
       api.adminRemovals(),
       api.adminPendingCerts().catch(() => []),
       api.adminReports('pending').catch(() => []),
-    ]).then(([s, u, l, b, h, lg, r, p, rpts]) => {
+      api.adminTradeProfiles('pending').catch(() => []),
+    ]).then(([s, u, l, b, h, lg, r, p, rpts, tps]) => {
       setStats(s); setUsers(u); setListings(l); setBoats(b);
       setHazards(h); setLogs(lg); setRemovals(r); setPending(p);
-      setReports(rpts);
+      setReports(rpts); setTradeProfiles(tps);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [user]);
 
@@ -1140,6 +1381,172 @@ export default function AdminScreen() {
                 filter={reportFilter}
                 setFilter={setReportFilter}
               />
+            )}
+
+            {tab === 'Trade Profiles' && (
+              <div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  {['pending', 'approved', 'rejected'].map(s => (
+                    <button key={s} onClick={async () => {
+                      setTradeFilter(s);
+                      try { const d = await api.adminTradeProfiles(s); setTradeProfiles(d); } catch {}
+                    }} style={{
+                      padding: '7px 14px', borderRadius: 'var(--r-md)', cursor: 'pointer',
+                      fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: tradeFilter === s ? 700 : 500,
+                      background: tradeFilter === s ? 'var(--ink)' : 'var(--paper)',
+                      color: tradeFilter === s ? 'var(--paper)' : 'var(--ink)',
+                      border: '1px solid var(--reed)', textTransform: 'capitalize',
+                    }}>{s}</button>
+                  ))}
+                </div>
+
+                {tradeProfiles.length === 0 ? (
+                  <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--silt)', fontSize: 14 }}>
+                    No {tradeFilter} trade profiles.
+                  </div>
+                ) : tradeProfiles.map(tp => {
+                  const u = tp.userId || {};
+                  const allCats = [...(tp.categories || []), ...(tp.otherCategory ? [`Other: ${tp.otherCategory}`] : [])];
+                  const radius = tp.travelRadius == null ? 'Anywhere' : tp.travelRadius < 1 ? '< 1 mile' : `${tp.travelRadius} miles`;
+                  return (
+                    <div key={tp._id} style={{ background: 'var(--paper)', border: '1px solid var(--reed)', borderRadius: 'var(--r-lg)', marginBottom: 16, overflow: 'hidden' }}>
+                      {/* Business photos */}
+                      {tp.businessPhotos?.length > 0 && (
+                        <div style={{ display: 'flex', gap: 4, padding: 8, background: 'var(--linen)', flexWrap: 'wrap' }}>
+                          {tp.businessPhotos.map((src, i) => (
+                            <a key={i} href={src} target="_blank" rel="noopener noreferrer">
+                              <img src={src} alt="" style={{ width: 100, height: 80, objectFit: 'cover', borderRadius: 6 }} />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+
+                      <div style={{ padding: '14px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: 16 }}>
+                              {tp.businessName || u.displayName || u.username || '—'}
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--silt)', marginTop: 2 }}>
+                              <a href={`/profile/${u._id}`} target="_blank" rel="noopener noreferrer"
+                                style={{ color: 'var(--moss)', fontWeight: 600, textDecoration: 'none' }}>
+                                {u.displayName || u.username}
+                              </a>
+                              {u.email && <> · {u.email}</>}
+                            </div>
+                          </div>
+                          <span style={{
+                            fontSize: 11, padding: '4px 10px', borderRadius: 99, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+                            background: tp.status === 'approved' ? '#e8f5e9' : tp.status === 'rejected' ? '#fce4ec' : '#fff9c4',
+                            color: tp.status === 'approved' ? '#2e7d32' : tp.status === 'rejected' ? '#880e4f' : '#f57f17',
+                          }}>{tp.status}</span>
+                        </div>
+
+                        {tp.businessDescription && (
+                          <div style={{ fontSize: 13.5, color: 'var(--ink)', lineHeight: 1.5, marginBottom: 10 }}>
+                            {tp.businessDescription}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                          <div style={{ fontSize: 12, color: 'var(--silt)' }}>
+                            <strong style={{ color: 'var(--ink)' }}>Categories:</strong><br />
+                            {allCats.join(', ') || '—'}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--silt)' }}>
+                            <strong style={{ color: 'var(--ink)' }}>Operates at:</strong><br />
+                            {tp.operatesAt || '—'} {tp.operatesLat ? `(${tp.operatesLat.toFixed(4)}, ${tp.operatesLng?.toFixed(4)})` : ''}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--silt)' }}>
+                            <strong style={{ color: 'var(--ink)' }}>Travel radius:</strong><br />
+                            {radius}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--silt)' }}>
+                            <strong style={{ color: 'var(--ink)' }}>Submitted:</strong><br />
+                            {fmtDate(tp.updatedAt)}
+                          </div>
+                        </div>
+
+                        {/* Insurance cert */}
+                        {tp.liabilityInsuranceUrl && (
+                          <div style={{ marginBottom: 8 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--silt)', marginBottom: 4 }}>PUBLIC LIABILITY INSURANCE</div>
+                            {tp.liabilityInsuranceUrl.startsWith('data:image') ? (
+                              <a href={tp.liabilityInsuranceUrl} target="_blank" rel="noopener noreferrer">
+                                <img src={tp.liabilityInsuranceUrl} alt="Insurance cert" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 6, border: '1px solid var(--reed)' }} />
+                              </a>
+                            ) : (
+                              <a href={tp.liabilityInsuranceUrl} target="_blank" rel="noopener noreferrer"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--linen)', borderRadius: 'var(--r-md)', border: '1px solid var(--reed)', fontSize: 13, color: 'var(--ink)', textDecoration: 'none' }}>
+                                📄 View insurance certificate
+                              </a>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Trade certs */}
+                        {tp.tradeCertUrls?.length > 0 && (
+                          <div style={{ marginBottom: 10 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--silt)', marginBottom: 4 }}>TRADE CERTIFICATES</div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {tp.tradeCertUrls.map((src, i) => (
+                                src.startsWith('data:image') ? (
+                                  <a key={i} href={src} target="_blank" rel="noopener noreferrer">
+                                    <img src={src} alt="" style={{ width: 100, height: 80, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--reed)' }} />
+                                  </a>
+                                ) : (
+                                  <a key={i} href={src} target="_blank" rel="noopener noreferrer"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--linen)', borderRadius: 'var(--r-md)', border: '1px solid var(--reed)', fontSize: 13, color: 'var(--ink)', textDecoration: 'none' }}>
+                                    📄 Certificate {i + 1}
+                                  </a>
+                                )
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {tp.adminNote && (
+                          <div style={{ padding: '8px 12px', background: 'var(--moss-soft)', borderRadius: 'var(--r-md)', fontSize: 13, marginBottom: 10 }}>
+                            <strong>Admin note:</strong> {tp.adminNote}
+                          </div>
+                        )}
+
+                        {tp.status === 'pending' && (
+                          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                            <button disabled={tradeActioning === tp._id}
+                              onClick={async () => {
+                                const reason = prompt('Reason for rejection?');
+                                if (!reason) return;
+                                setTradeActioning(tp._id);
+                                try {
+                                  await api.adminRejectTradeProfile(tp._id, reason);
+                                  setTradeProfiles(prev => prev.filter(x => x._id !== tp._id));
+                                } catch (e) { alert('Failed: ' + e.message); }
+                                setTradeActioning(null);
+                              }}
+                              style={{ flex: 1, padding: '10px 14px', borderRadius: 'var(--r-md)', border: '1px solid var(--reed)', background: 'var(--paper)', color: 'var(--ink)', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+                              Reject
+                            </button>
+                            <button disabled={tradeActioning === tp._id}
+                              onClick={async () => {
+                                const note = prompt('Optional note to the tradesperson (or leave blank):') || undefined;
+                                setTradeActioning(tp._id);
+                                try {
+                                  await api.adminApproveTradeProfile(tp._id, note);
+                                  setTradeProfiles(prev => prev.filter(x => x._id !== tp._id));
+                                } catch (e) { alert('Failed: ' + e.message); }
+                                setTradeActioning(null);
+                              }}
+                              style={{ flex: 1, padding: '10px 14px', borderRadius: 'var(--r-md)', border: 'none', background: 'var(--moss)', color: 'var(--paper)', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+                              {tradeActioning === tp._id ? '…' : 'Approve'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
 
             {tab === 'Users' && (

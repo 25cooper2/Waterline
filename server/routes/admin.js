@@ -8,6 +8,7 @@ import ListingAnalytics from '../models/ListingAnalytics.js';
 import Post from '../models/Post.js';
 import Report from '../models/Report.js';
 import Message from '../models/Message.js';
+import TradeProfile from '../models/TradeProfile.js';
 import { adminMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -485,20 +486,40 @@ router.get('/reports', adminMiddleware, async (req, res) => {
   try {
     const { status = 'pending' } = req.query;
     const reports = await Report.find({ status })
-      .populate('reporter', 'displayName username email')
+      .populate('reporter', 'displayName username email profilePhotoUrl _id')
       .populate('resolvedBy', 'displayName username')
       .sort({ createdAt: -1 })
       .limit(500);
 
-    // Attach a snapshot of the reported content so admin can see it inline
+    // Attach full snapshot of the reported content
     const enriched = await Promise.all(reports.map(async (r) => {
       let target = null;
+      let replySnapshot = null;
       try {
-        if (r.targetType === 'post') target = await Post.findById(r.targetId).populate('authorId', 'displayName username').lean();
-        else if (r.targetType === 'product') target = await Product.findById(r.targetId).populate('sellerId', 'displayName username').lean();
-        else if (r.targetType === 'user') target = await User.findById(r.targetId).select('displayName username email reportStatus').lean();
+        if (r.targetType === 'post') {
+          target = await Post.findById(r.targetId)
+            .populate('authorId', 'displayName username email profilePhotoUrl _id')
+            .lean();
+        } else if (r.targetType === 'reply') {
+          const post = await Post.findById(r.targetId)
+            .populate('authorId', 'displayName username email profilePhotoUrl _id')
+            .populate('replies.authorId', 'displayName username email profilePhotoUrl _id')
+            .lean();
+          if (post) {
+            target = post;
+            replySnapshot = post.replies?.find(rr => rr._id?.toString() === r.replyId?.toString()) || null;
+          }
+        } else if (r.targetType === 'product') {
+          target = await Product.findById(r.targetId)
+            .populate('sellerId', 'displayName username email profilePhotoUrl _id')
+            .lean();
+        } else if (r.targetType === 'user') {
+          target = await User.findById(r.targetId)
+            .select('displayName username email profilePhotoUrl reportStatus _id bio')
+            .lean();
+        }
       } catch {}
-      return { ...r.toObject(), target };
+      return { ...r.toObject(), target, replySnapshot };
     }));
 
     res.json(enriched);
@@ -547,9 +568,23 @@ router.post('/reports/:id/approve', adminMiddleware, async (req, res) => {
       }
     }
 
+    // Handle reply removal
+    if (report.targetType === 'reply') {
+      const post = await Post.findById(report.targetId);
+      if (post && report.replyId) {
+        const reply = post.replies.id(report.replyId);
+        if (reply) {
+          reportedUserId = reply.authorId;
+          reply.deleteOne();
+          post.replyCount = post.replies.length;
+          await post.save();
+        }
+      }
+    }
+
     // Notify reported user via message
     if (reportedUserId) {
-      const typeLabel = report.targetType === 'post' ? 'post' : report.targetType === 'product' ? 'listing' : 'profile';
+      const typeLabel = report.targetType === 'post' ? 'post' : report.targetType === 'product' ? 'listing' : report.targetType === 'reply' ? 'reply' : 'profile';
       const noteText = adminNote ? ` Admin note: "${adminNote}".` : '';
       await Message.create({
         senderId: req.user.userId,
@@ -597,6 +632,82 @@ router.post('/reports/:id/dismiss', adminMiddleware, async (req, res) => {
     });
 
     res.json({ message: 'Report dismissed, content restored, reporter notified' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ─────────────────────────────────────────────────────────────────
+ * TRADE PROFILES — review queue
+ * ───────────────────────────────────────────────────────────────── */
+
+router.get('/trade-profiles', adminMiddleware, async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = status ? { status } : {};
+    const profiles = await TradeProfile.find(filter)
+      .populate('userId', 'displayName username email profilePhotoUrl _id')
+      .populate('reviewedBy', 'displayName username')
+      .sort({ updatedAt: -1 })
+      .limit(200);
+    res.json(profiles);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/trade-profiles/:id/approve', adminMiddleware, async (req, res) => {
+  try {
+    const { adminNote } = req.body;
+    const profile = await TradeProfile.findById(req.params.id).populate('userId', '_id displayName username email');
+    if (!profile) return res.status(404).json({ error: 'Trade profile not found' });
+
+    profile.status = 'approved';
+    profile.adminNote = adminNote || null;
+    profile.reviewedBy = req.user.userId;
+    profile.reviewedAt = new Date();
+    await profile.save();
+
+    if (profile.userId?._id) {
+      const noteText = adminNote ? ` Note: "${adminNote}".` : '';
+      await Message.create({
+        senderId: req.user.userId,
+        recipientId: profile.userId._id,
+        subject: 'Your trade profile has been approved',
+        body: `Great news — your Waterline trade profile has been reviewed and approved. You're now listed in the Services marketplace and boaters can find and contact you directly.${noteText}`,
+      });
+    }
+
+    res.json({ message: 'Trade profile approved', profile });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/trade-profiles/:id/reject', adminMiddleware, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    if (!reason) return res.status(400).json({ error: 'Rejection reason required' });
+
+    const profile = await TradeProfile.findById(req.params.id).populate('userId', '_id displayName username email');
+    if (!profile) return res.status(404).json({ error: 'Trade profile not found' });
+
+    profile.status = 'rejected';
+    profile.adminNote = reason;
+    profile.reviewedBy = req.user.userId;
+    profile.reviewedAt = new Date();
+    await profile.save();
+
+    if (profile.userId?._id) {
+      await Message.create({
+        senderId: req.user.userId,
+        recipientId: profile.userId._id,
+        subject: 'Your trade profile needs updating',
+        body: `Thanks for submitting your Waterline trade profile. After review, we weren't able to approve it at this time. Reason: "${reason}". Please update your profile and resubmit.`,
+      });
+    }
+
+    res.json({ message: 'Trade profile rejected', profile });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

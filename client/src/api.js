@@ -110,9 +110,19 @@ export const api = {
 
   // Reports
   fileReport: (body) => req('/api/reports', { method: 'POST', body: JSON.stringify(body) }),
+  reportReply: (postId, replyId, reason, details) =>
+    req(`/api/posts/${postId}/replies/${replyId}/report`, { method: 'POST', body: JSON.stringify({ reason, details }) }),
   adminReports: (status = 'pending') => req(`/api/admin/reports?status=${status}`),
   adminApproveReport: (id, adminNote) => req(`/api/admin/reports/${id}/approve`, { method: 'POST', body: JSON.stringify({ adminNote }) }),
   adminDismissReport: (id, adminNote) => req(`/api/admin/reports/${id}/dismiss`, { method: 'POST', body: JSON.stringify({ adminNote }) }),
+
+  // Trade profiles
+  getMyTradeProfile: () => req('/api/trade/me'),
+  saveTradeProfile: (body) => req('/api/trade', { method: 'POST', body: JSON.stringify(body) }),
+  submitTradeProfile: () => req('/api/trade/submit', { method: 'POST' }),
+  adminTradeProfiles: (status) => req(`/api/admin/trade-profiles${status ? `?status=${status}` : ''}`),
+  adminApproveTradeProfile: (id, adminNote) => req(`/api/admin/trade-profiles/${id}/approve`, { method: 'POST', body: JSON.stringify({ adminNote }) }),
+  adminRejectTradeProfile: (id, reason) => req(`/api/admin/trade-profiles/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
 
   // Follows
   searchUsers: (q) => req(`/api/users/_search?q=${encodeURIComponent(q)}`),

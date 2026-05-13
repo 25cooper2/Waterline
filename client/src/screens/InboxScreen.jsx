@@ -685,6 +685,7 @@ function PostDetailSheet({ postId, onClose, requireLogin, navigate, currentUser 
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [reportingReplyId, setReportingReplyId] = useState(null);
 
   useEffect(() => {
     api.getPost(postId).then(setPost).catch(() => {});
@@ -755,6 +756,14 @@ function PostDetailSheet({ postId, onClose, requireLogin, navigate, currentUser 
             onSubmit={(reason, details) => api.fileReport({ targetType: 'post', targetId: postId, reason, details })}
           />
 
+          {/* Reply report sheet */}
+          <ReportSheet
+            open={!!reportingReplyId}
+            onClose={() => setReportingReplyId(null)}
+            targetLabel="this reply"
+            onSubmit={(reason, details) => api.reportReply(postId, reportingReplyId, reason, details)}
+          />
+
           {/* Replies */}
           <div style={{ marginTop: 12, paddingBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--silt)', marginBottom: 8 }}>
@@ -763,8 +772,9 @@ function PostDetailSheet({ postId, onClose, requireLogin, navigate, currentUser 
             {(post.replies || []).map((r, i) => {
               const ra = r.authorId || {};
               const rhandle = ra.username ? `@${ra.username}` : (ra.displayName || 'Boater');
+              const isOwnReply = currentUser && ra._id === currentUser._id;
               return (
-                <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 0', borderTop: i === 0 ? 0 : '1px solid var(--linen)' }}>
+                <div key={r._id || i} style={{ display: 'flex', gap: 10, padding: '10px 0', borderTop: i === 0 ? 0 : '1px solid var(--linen)' }}>
                   <div onClick={() => ra._id && navigate(`/profile/${ra._id}`)} style={{ cursor: ra._id ? 'pointer' : 'default' }}>
                     <Avatar name={ra.displayName || ra.username} src={ra.profilePhotoUrl} size={32} />
                   </div>
@@ -772,6 +782,15 @@ function PostDetailSheet({ postId, onClose, requireLogin, navigate, currentUser 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span onClick={() => ra._id && navigate(`/profile/${ra._id}`)} style={{ fontWeight: 600, fontSize: 13.5, cursor: ra._id ? 'pointer' : 'default', color: 'var(--moss)' }}>{rhandle}</span>
                       <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--silt)' }}>{timeAgo(r.createdAt)}</span>
+                      {!isOwnReply && currentUser && r._id && (
+                        <button
+                          onClick={() => setReportingReplyId(r._id)}
+                          title="Report this reply"
+                          style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer', color: 'var(--silt)', display: 'flex', alignItems: 'center' }}
+                        >
+                          <Icon name="flag" size={13} color="var(--silt)" />
+                        </button>
+                      )}
                     </div>
                     <div style={{ fontSize: 14, marginTop: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.body}</div>
                   </div>

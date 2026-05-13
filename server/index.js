@@ -13,6 +13,7 @@ import followRoutes from './routes/follows.js';
 import adminRoutes from './routes/admin.js';
 import postRoutes from './routes/posts.js';
 import reportRoutes from './routes/reports.js';
+import tradeRoutes from './routes/trade.js';
 import Hazard from './models/Hazard.js';
 
 dotenv.config();
@@ -51,6 +52,7 @@ app.use('/api/users', followRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/trade', tradeRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

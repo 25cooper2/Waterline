@@ -184,6 +184,44 @@ router.post('/:postId/report', authMiddleware, async (req, res) => {
   }
 });
 
+// Report a reply inside a post
+router.post('/:postId/replies/:replyId/report', authMiddleware, async (req, res) => {
+  try {
+    const { reason, details } = req.body || {};
+    const post = await Post.findById(req.params.postId);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+
+    const reply = post.replies.id(req.params.replyId);
+    if (!reply) return res.status(404).json({ error: 'Reply not found' });
+
+    if (reply.authorId.toString() === req.user.userId) {
+      return res.status(400).json({ error: 'You cannot report your own reply' });
+    }
+
+    const Report = (await import('../models/Report.js')).default;
+    const VALID_REASONS = ['spam_scam', 'harassment', 'hate_speech', 'sexual_content', 'misinformation', 'impersonation', 'off_topic', 'other'];
+    const safeReason = VALID_REASONS.includes(reason) ? reason : 'other';
+
+    await Report.findOneAndUpdate(
+      { reporter: req.user.userId, targetType: 'reply', targetId: post._id, replyId: reply._id },
+      { $setOnInsert: {
+        reporter: req.user.userId,
+        targetType: 'reply',
+        targetId: post._id,
+        replyId: reply._id,
+        reason: safeReason,
+        details: details ? String(details).slice(0, 500) : null,
+      }},
+      { upsert: true, new: false }
+    ).catch(() => {});
+
+    res.json({ message: 'Reply reported. Our team will review it.' });
+  } catch (e) {
+    if (e.code === 11000) return res.status(409).json({ error: 'You have already reported this reply' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Tag autocomplete — returns matching tags by prefix
 router.get('/_/tags/search', async (req, res) => {
   try {
