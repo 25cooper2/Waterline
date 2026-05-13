@@ -761,7 +761,10 @@ function PostDetailSheet({ postId, onClose, requireLogin, navigate, currentUser 
             open={!!reportingReplyId}
             onClose={() => setReportingReplyId(null)}
             targetLabel="this reply"
-            onSubmit={(reason, details) => api.reportReply(postId, reportingReplyId, reason, details)}
+            onSubmit={async (reason, details) => {
+              await api.reportReply(postId, reportingReplyId, reason, details);
+              setPost(p => ({ ...p, replies: (p.replies || []).filter(r => r._id !== reportingReplyId) }));
+            }}
           />
 
           {/* Replies */}
