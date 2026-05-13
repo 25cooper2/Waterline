@@ -187,46 +187,78 @@ export default function ProfileScreen() {
           </button>
         </div>
 
-        {/* Trade upgrade card */}
-        <div style={{ padding: '20px 20px 0' }}>
-          <div style={{
-            background: 'var(--moss-soft)',
-            border: '1px solid rgba(26,107,90,0.15)',
-            borderRadius: 'var(--r-lg)',
-            padding: '20px',
-            display: 'flex',
-            gap: 14,
-            alignItems: 'flex-start',
-          }}>
+        {/* Trade card — hide entirely once approved, show edit instead */}
+        {user?.isTrader ? (
+          <div style={{ padding: '20px 20px 0' }}>
             <div style={{
-              width: 44,
-              height: 44,
-              borderRadius: 'var(--r-md)',
-              background: 'rgba(26,107,90,0.12)',
+              background: 'var(--moss-soft)',
+              border: '1px solid rgba(26,107,90,0.15)',
+              borderRadius: 'var(--r-lg)',
+              padding: '20px',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
+              gap: 14,
+              alignItems: 'flex-start',
             }}>
-              <Icon name="wrench" size={22} color="var(--moss)" />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink)', marginBottom: 3 }}>
-                Offer your services
+              <div style={{
+                width: 44, height: 44, borderRadius: 'var(--r-md)',
+                background: 'rgba(26,107,90,0.12)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Icon name="wrench" size={22} color="var(--moss)" />
               </div>
-              <div style={{ fontSize: 13, color: 'var(--silt)', lineHeight: 1.45, marginBottom: 14 }}>
-                Become a Waterline Trade
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink)', marginBottom: 3 }}>
+                  Waterline Trade
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--silt)', lineHeight: 1.45, marginBottom: 14 }}>
+                  Your trade profile is live
+                </div>
+                <button
+                  onClick={() => nav('/trade-setup')}
+                  className="btn primary"
+                  style={{ height: 40, fontSize: 13.5, padding: '0 18px' }}
+                >
+                  Edit trade profile
+                </button>
               </div>
-              <button
-                onClick={() => nav('/trade-setup')}
-                className="btn primary"
-                style={{ height: 40, fontSize: 13.5, padding: '0 18px' }}
-              >
-                Set up trade profile
-              </button>
             </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ padding: '20px 20px 0' }}>
+            <div style={{
+              background: 'var(--moss-soft)',
+              border: '1px solid rgba(26,107,90,0.15)',
+              borderRadius: 'var(--r-lg)',
+              padding: '20px',
+              display: 'flex',
+              gap: 14,
+              alignItems: 'flex-start',
+            }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: 'var(--r-md)',
+                background: 'rgba(26,107,90,0.12)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Icon name="wrench" size={22} color="var(--moss)" />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink)', marginBottom: 3 }}>
+                  Offer your services
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--silt)', lineHeight: 1.45, marginBottom: 14 }}>
+                  Become a Waterline Trade
+                </div>
+                <button
+                  onClick={() => nav('/trade-setup')}
+                  className="btn primary"
+                  style={{ height: 40, fontSize: 13.5, padding: '0 18px' }}
+                >
+                  Set up trade profile
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* My listings section */}
         <div style={{ padding: '24px 20px 0' }}>
