@@ -9,6 +9,7 @@ import Post from '../models/Post.js';
 import Report from '../models/Report.js';
 import Message from '../models/Message.js';
 import TradeProfile from '../models/TradeProfile.js';
+import AdminAction from '../models/AdminAction.js';
 import { adminMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -55,8 +56,12 @@ function pickEditable(kind, body) {
   return out;
 }
 
+function logAction(adminId, action, targetType, targetId, details) {
+  AdminAction.create({ adminId, action, targetType, targetId, details }).catch(() => {});
+}
+
 /* ─────────────────────────────────────────────────────────────────
- * Certifications (boat verification queue) — unchanged
+ * Certifications (boat verification queue)
  * ───────────────────────────────────────────────────────────────── */
 
 router.get('/certifications/pending', adminMiddleware, async (req, res) => {
@@ -112,6 +117,8 @@ router.post('/certifications/:boatId/approve', adminMiddleware, async (req, res)
       await user.save();
     }
 
+    logAction(req.user.userId, 'approve_certification', 'boat', boat._id, `Approved boat ${boat.boatName}`);
+
     await boat.populate('ownerId', 'displayName username profilePhotoUrl');
     res.json({ message: 'Certification approved', boat });
   } catch (error) {
@@ -138,6 +145,8 @@ router.post('/certifications/:boatId/reject', adminMiddleware, async (req, res) 
       await user.save();
     }
 
+    logAction(req.user.userId, 'reject_certification', 'boat', boat._id, `Rejected boat ${boat.boatName}: ${reason}`);
+
     await boat.populate('ownerId', 'displayName username profilePhotoUrl');
     res.json({ message: 'Certification rejected', boat });
   } catch (error) {
@@ -146,7 +155,7 @@ router.post('/certifications/:boatId/reject', adminMiddleware, async (req, res) 
 });
 
 /* ─────────────────────────────────────────────────────────────────
- * Stats (Overview)
+ * Stats (Overview) — now includes pending counts for review queue
  * ───────────────────────────────────────────────────────────────── */
 
 router.get('/stats', adminMiddleware, async (req, res) => {
@@ -157,6 +166,7 @@ router.get('/stats', adminMiddleware, async (req, res) => {
       totalListings, activeListings,
       totalLogEntries, totalHazards,
       totalRemovals,
+      pendingReports, pendingTradeProfiles,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ isVerified: true }),
@@ -168,6 +178,8 @@ router.get('/stats', adminMiddleware, async (req, res) => {
       Logbook.countDocuments(),
       Hazard.countDocuments(),
       ListingAnalytics.countDocuments(),
+      Report.countDocuments({ status: 'pending' }),
+      TradeProfile.countDocuments({ status: 'pending' }),
     ]);
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000);
@@ -196,6 +208,12 @@ router.get('/stats', adminMiddleware, async (req, res) => {
       logbook: { total: totalLogEntries },
       hazards: { total: totalHazards },
       removals: { total: totalRemovals, avgDaysLive, breakdown: removalBreakdown, topCategories },
+      pendingQueue: {
+        certifications: pendingBoats,
+        reports: pendingReports,
+        tradeProfiles: pendingTradeProfiles,
+        total: pendingBoats + pendingReports + pendingTradeProfiles,
+      },
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -203,13 +221,18 @@ router.get('/stats', adminMiddleware, async (req, res) => {
 });
 
 /* ─────────────────────────────────────────────────────────────────
- * USERS — list / get / update / delete
+ * USERS — list (with search) / get / update / delete
  * ───────────────────────────────────────────────────────────────── */
 
 router.get('/users', adminMiddleware, async (req, res) => {
   try {
-    // Return full documents (passwordHash stripped by toJSON).
-    const users = await User.find().sort({ createdAt: -1 }).limit(500);
+    const { q } = req.query;
+    let filter = {};
+    if (q && q.trim()) {
+      const re = new RegExp(q.trim(), 'i');
+      filter = { $or: [{ displayName: re }, { username: re }, { email: re }, { firstName: re }, { surname: re }] };
+    }
+    const users = await User.find(filter).sort({ createdAt: -1 }).limit(500);
     res.json(users);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -232,6 +255,7 @@ router.put('/users/:id', adminMiddleware, async (req, res) => {
     updates.updatedAt = new Date();
     const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
     if (!user) return res.status(404).json({ error: 'User not found' });
+    logAction(req.user.userId, 'update', 'user', user._id, `Updated user ${user.displayName || user.email}`);
     res.json(user);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -245,6 +269,7 @@ router.delete('/users/:id', adminMiddleware, async (req, res) => {
     }
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
+    logAction(req.user.userId, 'delete', 'user', req.params.id, `Deleted user ${user.displayName || user.email}`);
     res.json({ message: 'User deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -252,12 +277,18 @@ router.delete('/users/:id', adminMiddleware, async (req, res) => {
 });
 
 /* ─────────────────────────────────────────────────────────────────
- * LISTINGS (Products) — list / get / update / delete
+ * LISTINGS (Products) — list (with search) / get / update / delete
  * ───────────────────────────────────────────────────────────────── */
 
 router.get('/listings', adminMiddleware, async (req, res) => {
   try {
-    const listings = await Product.find()
+    const { q } = req.query;
+    let filter = {};
+    if (q && q.trim()) {
+      const re = new RegExp(q.trim(), 'i');
+      filter = { $or: [{ title: re }, { description: re }, { category: re }, { location: re }] };
+    }
+    const listings = await Product.find(filter)
       .populate('sellerId', 'displayName username email')
       .sort({ createdAt: -1 })
       .limit(500);
@@ -285,6 +316,7 @@ router.put('/listings/:id', adminMiddleware, async (req, res) => {
     const product = await Product.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true })
       .populate('sellerId', 'displayName username email');
     if (!product) return res.status(404).json({ error: 'Listing not found' });
+    logAction(req.user.userId, 'update', 'listing', product._id, `Updated listing "${product.title}"`);
     res.json(product);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -295,6 +327,7 @@ router.delete('/listings/:id', adminMiddleware, async (req, res) => {
   try {
     const product = await Product.findByIdAndDelete(req.params.id);
     if (!product) return res.status(404).json({ error: 'Listing not found' });
+    logAction(req.user.userId, 'delete', 'listing', req.params.id, `Deleted listing "${product.title}"`);
     res.json({ message: 'Listing deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -335,6 +368,7 @@ router.put('/boats/:id', adminMiddleware, async (req, res) => {
     const boat = await Boat.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true })
       .populate('ownerId', 'displayName username email');
     if (!boat) return res.status(404).json({ error: 'Boat not found' });
+    logAction(req.user.userId, 'update', 'boat', boat._id, `Updated boat ${boat.boatName}`);
     res.json(boat);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -345,6 +379,7 @@ router.delete('/boats/:id', adminMiddleware, async (req, res) => {
   try {
     const boat = await Boat.findByIdAndDelete(req.params.id);
     if (!boat) return res.status(404).json({ error: 'Boat not found' });
+    logAction(req.user.userId, 'delete', 'boat', req.params.id, `Deleted boat ${boat.boatName}`);
     res.json({ message: 'Boat deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -352,7 +387,7 @@ router.delete('/boats/:id', adminMiddleware, async (req, res) => {
 });
 
 /* ─────────────────────────────────────────────────────────────────
- * HAZARDS — list / get / update / delete
+ * HAZARDS — list / get / create / update / delete
  * ───────────────────────────────────────────────────────────────── */
 
 router.get('/hazards', adminMiddleware, async (req, res) => {
@@ -380,12 +415,40 @@ router.get('/hazards/:id', adminMiddleware, async (req, res) => {
   }
 });
 
+router.post('/hazards', adminMiddleware, async (req, res) => {
+  try {
+    const { hazardType, description, severity, lat, lng, startsAt, expiresAt, photos } = req.body;
+    if (!hazardType || !description || lat == null || lng == null || !expiresAt) {
+      return res.status(400).json({ error: 'hazardType, description, lat, lng, and expiresAt are required' });
+    }
+    const hazard = await Hazard.create({
+      reportedBy: req.user.userId,
+      hazardType,
+      description,
+      severity: severity || 'medium',
+      lat,
+      lng,
+      source: 'admin',
+      startsAt: startsAt || new Date(),
+      expiresAt,
+      photos: photos || [],
+    });
+    logAction(req.user.userId, 'create', 'hazard', hazard._id, `Created hazard: ${hazardType}`);
+    const populated = await Hazard.findById(hazard._id)
+      .populate('reportedBy', 'displayName username email');
+    res.status(201).json(populated);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 router.put('/hazards/:id', adminMiddleware, async (req, res) => {
   try {
     const updates = pickEditable('hazard', req.body);
     const hazard = await Hazard.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true })
       .populate('reportedBy', 'displayName username email');
     if (!hazard) return res.status(404).json({ error: 'Hazard not found' });
+    logAction(req.user.userId, 'update', 'hazard', hazard._id, `Updated hazard ${hazard.hazardType}`);
     res.json(hazard);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -396,6 +459,7 @@ router.delete('/hazards/:id', adminMiddleware, async (req, res) => {
   try {
     const hazard = await Hazard.findByIdAndDelete(req.params.id);
     if (!hazard) return res.status(404).json({ error: 'Hazard not found' });
+    logAction(req.user.userId, 'delete', 'hazard', req.params.id, `Deleted hazard ${hazard.hazardType}`);
     res.json({ message: 'Hazard deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -424,6 +488,7 @@ router.put('/logbooks/:id', adminMiddleware, async (req, res) => {
     updates.updatedAt = new Date();
     const log = await Logbook.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
     if (!log) return res.status(404).json({ error: 'Log entry not found' });
+    logAction(req.user.userId, 'update', 'logbook', log._id, 'Updated logbook entry');
     res.json(log);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -434,6 +499,7 @@ router.delete('/logbooks/:id', adminMiddleware, async (req, res) => {
   try {
     const log = await Logbook.findByIdAndDelete(req.params.id);
     if (!log) return res.status(404).json({ error: 'Log entry not found' });
+    logAction(req.user.userId, 'delete', 'logbook', req.params.id, 'Deleted logbook entry');
     res.json({ message: 'Log entry deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -441,7 +507,7 @@ router.delete('/logbooks/:id', adminMiddleware, async (req, res) => {
 });
 
 /* ─────────────────────────────────────────────────────────────────
- * Removal analytics + promote (unchanged)
+ * Removal analytics + promote
  * ───────────────────────────────────────────────────────────────── */
 
 router.get('/analytics/removals', adminMiddleware, async (req, res) => {
@@ -461,6 +527,7 @@ router.post('/promote', adminMiddleware, async (req, res) => {
     const { email } = req.body;
     const user = await User.findOneAndUpdate({ email }, { role: 'admin' }, { new: true });
     if (!user) return res.status(404).json({ error: 'User not found' });
+    logAction(req.user.userId, 'promote', 'user', user._id, `Promoted ${user.email} to admin`);
     res.json({ message: `${user.email} promoted to admin` });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -491,7 +558,6 @@ router.get('/reports', adminMiddleware, async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(500);
 
-    // Attach full snapshot of the reported content
     const enriched = await Promise.all(reports.map(async (r) => {
       let target = null;
       let replySnapshot = null;
@@ -528,7 +594,6 @@ router.get('/reports', adminMiddleware, async (req, res) => {
   }
 });
 
-// Approve a report: content is removed and reported user is notified
 router.post('/reports/:id/approve', adminMiddleware, async (req, res) => {
   try {
     const { adminNote } = req.body;
@@ -542,7 +607,6 @@ router.post('/reports/:id/approve', adminMiddleware, async (req, res) => {
     report.resolvedAt = new Date();
     await report.save();
 
-    // Remove the target content and find reported user's ID for notification
     let reportedUserId = null;
     if (report.targetType === 'post') {
       const post = await Post.findById(report.targetId);
@@ -568,7 +632,6 @@ router.post('/reports/:id/approve', adminMiddleware, async (req, res) => {
       }
     }
 
-    // Handle reply removal
     if (report.targetType === 'reply') {
       const post = await Post.findById(report.targetId);
       if (post && report.replyId) {
@@ -582,7 +645,6 @@ router.post('/reports/:id/approve', adminMiddleware, async (req, res) => {
       }
     }
 
-    // Notify reported user via message
     if (reportedUserId) {
       const typeLabel = report.targetType === 'post' ? 'post' : report.targetType === 'product' ? 'listing' : report.targetType === 'reply' ? 'reply' : 'profile';
       const noteText = adminNote ? ` Admin note: "${adminNote}".` : '';
@@ -594,13 +656,13 @@ router.post('/reports/:id/approve', adminMiddleware, async (req, res) => {
       });
     }
 
+    logAction(req.user.userId, 'approve_report', 'report', report._id, `Approved report (${report.targetType}): ${report.reason}`);
     res.json({ message: 'Report approved, content removed, user notified' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// Dismiss a report: content is restored and reporter is notified
 router.post('/reports/:id/dismiss', adminMiddleware, async (req, res) => {
   try {
     const { adminNote } = req.body;
@@ -614,7 +676,6 @@ router.post('/reports/:id/dismiss', adminMiddleware, async (req, res) => {
     report.resolvedAt = new Date();
     await report.save();
 
-    // Restore the target content
     if (report.targetType === 'post') {
       await Post.findByIdAndUpdate(report.targetId, { reportStatus: 'active' });
     } else if (report.targetType === 'product') {
@@ -623,7 +684,6 @@ router.post('/reports/:id/dismiss', adminMiddleware, async (req, res) => {
       await User.findByIdAndUpdate(report.targetId, { reportStatus: 'active' });
     }
 
-    // Notify reporter
     await Message.create({
       senderId: req.user.userId,
       recipientId: report.reporter,
@@ -631,6 +691,7 @@ router.post('/reports/:id/dismiss', adminMiddleware, async (req, res) => {
       body: `Thanks for flagging that content. We've reviewed your report and found it doesn't violate our community guidelines, so no action was taken. We appreciate you helping keep Waterline safe.`,
     });
 
+    logAction(req.user.userId, 'dismiss_report', 'report', report._id, `Dismissed report (${report.targetType}): ${report.reason}`);
     res.json({ message: 'Report dismissed, content restored, reporter notified' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -678,6 +739,7 @@ router.post('/trade-profiles/:id/approve', adminMiddleware, async (req, res) => 
       });
     }
 
+    logAction(req.user.userId, 'approve_trade_profile', 'trade_profile', profile._id, `Approved trade profile for ${profile.businessName}`);
     res.json({ message: 'Trade profile approved', profile });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -707,6 +769,7 @@ router.post('/trade-profiles/:id/reject', adminMiddleware, async (req, res) => {
       });
     }
 
+    logAction(req.user.userId, 'reject_trade_profile', 'trade_profile', profile._id, `Rejected trade profile for ${profile.businessName}: ${reason}`);
     res.json({ message: 'Trade profile rejected', profile });
   } catch (e) {
     res.status(500).json({ error: e.message });

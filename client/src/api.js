@@ -76,8 +76,8 @@ export const api = {
 
   // Admin
   adminStats: () => req('/api/admin/stats'),
-  adminUsers: () => req('/api/admin/users'),
-  adminListings: () => req('/api/admin/listings'),
+  adminUsers: (q) => req(`/api/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  adminListings: (q) => req(`/api/admin/listings${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   adminRemovals: () => req('/api/admin/analytics/removals'),
   adminPromote: (email) => req('/api/admin/promote', { method: 'POST', body: JSON.stringify({ email }) }),
   adminPendingCerts: () => req('/api/admin/certifications/pending'),
@@ -92,6 +92,7 @@ export const api = {
   adminDeleteListing: (id) => req(`/api/admin/listings/${id}`, { method: 'DELETE' }),
   adminUpdateBoat: (id, body) => req(`/api/admin/boats/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   adminDeleteBoat: (id) => req(`/api/admin/boats/${id}`, { method: 'DELETE' }),
+  adminCreateHazard: (body) => req('/api/admin/hazards', { method: 'POST', body: JSON.stringify(body) }),
   adminUpdateHazard: (id, body) => req(`/api/admin/hazards/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   adminDeleteHazard: (id) => req(`/api/admin/hazards/${id}`, { method: 'DELETE' }),
   adminUpdateLogbook: (id, body) => req(`/api/admin/logbooks/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
